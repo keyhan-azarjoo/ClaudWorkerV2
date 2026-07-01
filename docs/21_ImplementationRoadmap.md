@@ -284,7 +284,9 @@ additive→minor, clarification→patch) and updates every affected document in 
 ## What must never happen during construction
 
 - No subsystem built before its dependencies pass acceptance (all four gates).
-- No `claude -p` worker wired in before the deterministic core (S0–S5) is green.
+- No AI reasoning inside the Assignment Engine or any deterministic component (Law 18). `claude -p`
+  workers exist **only** behind the `Workers` port and are **faked** in tests, so the engine and its
+  CI stay deterministic and zero-token.
 - No V1 file modified.
 - No architecture change without an approved ACP + a spec version bump + updating this roadmap in the
   same change.
