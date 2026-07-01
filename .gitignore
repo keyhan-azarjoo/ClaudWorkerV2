@@ -1,0 +1,30 @@
+# macOS / exFAT SSD noise
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Go build output
+/bin/
+/dist/
+cwv2
+*.exe
+*.test
+*.out
+
+# Engine runtime state (never committed — lives in engine home, not the repo)
+/.cwv2/
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets — ALWAYS out of git (loaded from vault/keychain at runtime)
+secrets.json
+.secrets.json
+*.local.yaml
+*.local.json
+
+# Logs / scratch
+/logs/
+/tmp/
+/scratch/
