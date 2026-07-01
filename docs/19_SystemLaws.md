@@ -30,8 +30,10 @@ drawn from real V1 incidents).
 - **Failure example:** a worker builds on a week-old checkout → its "fix" reverts newer work on merge
   (a real V1 stale-tree hazard).
 
-## Law 3 — The Project Brain is the only persistent memory
-**(P4)** Durable knowledge lives in the Brain, never in an AI session.
+## Law 3 — The Knowledge Brain is the only persistent memory
+**(P4)** Durable knowledge lives in the **Knowledge Brain** (persistent), never in an AI session.
+Volatile run data lives in the separate **Execution State** store and is never confused with knowledge
+([04_ProjectBrain](04_ProjectBrain.md)).
 
 - **Why:** sessions are ephemeral; knowledge must outlive them and be rebuildable.
 - **Prevents:** knowledge dying with a killed worker; re-deriving the same facts repeatedly (token
@@ -47,7 +49,7 @@ instant loses nothing.
 - **Why:** enables cheap, small, parallel reasoning instead of expensive long-lived agents.
 - **Prevents:** context bloat; "precious" agents whose loss is costly; hidden state.
 - **Trade-offs:** all progress must be externalized (Git/Brain/run record) before it counts
-  ([16_WorkerStateMachine](16_WorkerStateMachine.md) W-4).
+  ([16_WorkerStateMachine](16_WorkerStateMachine.md) A-4).
 - **Failure example:** a long-lived agent accumulates 200 KB of context, gets slower and pricier each
   turn, then crashes and takes its unsaved reasoning with it.
 
@@ -109,8 +111,9 @@ enforced by the Lock Manager. No sharing of a mutable resource.
 
 - **Why:** the foundation of zero-conflict parallelism.
 - **Prevents:** two workers corrupting one tree; two claims on one issue; two runs driving one board.
-- **Trade-offs:** some serialization (advisory locks may defer a colliding issue,
-  [15_LockManager](15_LockManager.md)).
+- **Trade-offs:** some serialization (the merge lock serializes integration per repo). V1 enforces
+  this with three hard locks — issue, device, merge ([15_LockManager](15_LockManager.md)); finer
+  advisory locks are deferred to Future expansion.
 - **Failure example:** two agents `git checkout` different branches in the *same* shared clone and
   overwrite each other's working tree (an actual V1 incident this law exists to kill).
 

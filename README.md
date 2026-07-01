@@ -50,7 +50,7 @@ Read them in order. Each is complete and they are mutually consistent.
 | 01 | [Requirements](docs/01_Requirements.md) | Functional + non-functional requirements |
 | 02 | [Architecture](docs/02_Architecture.md) | Components, boundaries, data flow, tech choices |
 | 03 | [Workflow](docs/03_Workflow.md) | Issue lifecycle state machine |
-| 04 | [Project Brain](docs/04_ProjectBrain.md) | Durable knowledge store |
+| 04 | [Project Brain](docs/04_ProjectBrain.md) | Knowledge Brain (persistent) + Execution State (temporary) |
 | 05 | [Workers](docs/05_Workers.md) | The 4 worker types + prompt contracts |
 | 06 | [QA](docs/06_QA.md) | Human-like + headless QA, deferral |
 | 07 | [Git](docs/07_Git.md) | Branch/merge/lock model |
@@ -66,6 +66,10 @@ Read them in order. Each is complete and they are mutually consistent.
 | 17 | [Repair Loop](docs/17_RepairLoop.md) | The universal Observe→Analyse→Repair→Verify loop, per domain |
 | 18 | [Plugin Contract](docs/18_PlugInContract.md) | Uniform capability interface every plugin implements |
 | 19 | [System Laws](docs/19_SystemLaws.md) | The 18 immutable laws the whole system obeys |
+| 20 | [Decision Engine](docs/20_DecisionEngine.md) | Deterministic decisions: retry/repair/escalate/split/defer/merge/abort |
+| 21 | [Implementation Roadmap](docs/21_ImplementationRoadmap.md) | Construction manual: subsystem order, milestones, rollback |
+| 22 | [Migration](docs/22_Migration.md) | First-phase onboarding of any existing project |
+| — | [Architecture Review](docs/ARCHITECTURE_REVIEW.md) | Pre-freeze review + freeze recommendation |
 
 ## License
 

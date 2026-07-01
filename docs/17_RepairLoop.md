@@ -33,7 +33,7 @@ the deterministic **observations** and **verifications** differ (supplied by plu
 - **Verify (deterministic, 0 tokens):** re-run the gates. Pass → stop. Fail → loop with the new,
   structured failure as the only added context (P9).
 
-This maps directly onto the slot states Coding↔Building↔QA↔Repair in
+This maps directly onto the Assignment states Coding↔Building↔QA↔Repair in
 [16_WorkerStateMachine](16_WorkerStateMachine.md): Observe+Verify are the Building/QA gates; Analyse
 is folded into the Developer/QA workers; Repair is Coding.
 
@@ -76,7 +76,7 @@ The loop stops when **any** of these is true:
 5. **Hard block:** a required, non-deferrable resource is missing → Blocked.
 6. **Cancellation:** owner stop-issue.
 
-On 2–5 the slot goes to Failed/Blocked → NEEDS_HUMAN with the full evidence trail.
+On 2–5 the Assignment goes to Failed/Blocked → NEEDS_HUMAN with the full evidence trail.
 
 ## Maximum retries & escalation
 

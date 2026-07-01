@@ -69,7 +69,8 @@ dashboard never mutates git or the DB directly.
 
 ## Data model
 
-- **Read model:** queries over the SQLite DB ([12_Database](12_Database.md)) — runs, issues cache,
+- **Read model:** queries over the Execution State DB (`state.db`, [12_Database](12_Database.md)) —
+  assignments, issues cache,
   locks, deferrals, failures, cost.
 - **Live model:** SSE stream from the Orchestrator for progress ticks and worker log tails.
 - No separate dashboard database; it is a pure projection (P6).

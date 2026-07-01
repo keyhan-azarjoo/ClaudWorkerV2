@@ -22,9 +22,10 @@ external SSD (P1, C-6). No VPS is required, ever (NFR-1).
     projects/
       myotgo/
         cwv2.yaml
-        brain.db
-        knowledge/                # architecture.md, decisions/, conventions.md
-        worktrees/<ISSUE-KEY>/    # per-issue git worktrees
+        knowledge.db              # Knowledge Brain (persistent; backed up)
+        knowledge/                # architecture.md, conventions.md, rules.md, glossary.md, decisions/
+        state.db                  # Execution State (temporary; rebuildable)
+        worktrees/<ISSUE-KEY>/    # per-assignment git worktrees
         artifacts/                # screenshots, renders, logs, evidence
     logs/
 ```

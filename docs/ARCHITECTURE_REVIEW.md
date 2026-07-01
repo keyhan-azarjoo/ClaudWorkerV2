@@ -1,97 +1,113 @@
-# Architecture Review (pre-freeze)
+# Architecture Review (Round 2) & Freeze Recommendation
 
-Review of the full ClaudWorker V2 specification (docs 00–19) for the issues called out in the
-extension brief: duplicate concepts, contradictions, over-engineering, unnecessary complexity, token
-waste, missing workflows/diagrams/failure-cases/recovery, and broken references — plus rename/removal
-suggestions. **No code was written.** The architecture is **not yet frozen**; the recommendations
-below are for the owner to accept/reject before freeze.
+Second full review of the ClaudWorker V2 specification (docs 00–22) after the migration/decision
+extension and the owner-approved simplifications. Scope of this pass: over-engineering, duplicate
+concepts, contradictions, unnecessary AI, token waste, large prompts, complex workflows, subsystems
+that can merge, and anything that can become deterministic Go. **No code was written.**
 
-## Verdict
+## What changed since Round 1 (all owner-approved)
 
-The spec is internally consistent and implementable. Automated checks pass: all 20 docs present,
-**every internal link resolves**, worker count ("exactly four") consistent, `maxAttempts=3`
-consistent across 03/13/16/17, dashboard port (8790) consistent, engine-home path consistent. No
-contradictions block a freeze. The items below are refinements, not blockers.
+1. **"Worker Slot" → "Assignment"** everywhere (durable execution unit). "Worker" now means only the
+   ephemeral `claude -p` step. Cross-doc rename applied; invariants renamed W-* → A-*.
+2. **Lock Manager V1 simplified** to exactly three hard locks — **issue, device, merge**. Advisory
+   file/folder/module/repo locks moved to a clearly-marked **Future expansion** (build only if
+   measured conflict rate justifies). Schema stays forward-compatible.
+3. **Project Brain split** into two independent stores: **Knowledge Brain** (`knowledge.db` +
+   `knowledge/` markdown — persistent) and **Execution State** (`state.db` — temporary, rebuildable).
+   Prompts read from the Knowledge Brain only.
+4. **New doc 20 — Decision Engine:** all control-flow (retry/repair/escalate/split/defer/merge/abort)
+   centralized as deterministic rules; removes decision logic scattered across 03/16/17.
+5. **New doc 21 — Implementation Roadmap:** frozen subsystem order S0–S13, milestones M0–M5, rollback.
+6. **New doc 22 — Migration:** the reusable first-phase onboarding (repo+Jira analysis, ClaudeWorker
+   eligibility, normalization, deferral, Knowledge Brain init, validation, human-review gate).
 
-## 1. Contradiction found and resolved — "worker" overload
+## Automated checks (this pass)
 
-- **Issue:** [05_Workers](05_Workers.md) defines a *worker* as a disposable per-step `claude -p`
-  process, while the requested [16_WorkerStateMachine](16_WorkerStateMachine.md) describes a *worker*
-  that persists Idle→…→Done. Read literally these conflict (a disposable thing can't also be
-  long-lived).
-- **Resolution:** introduced one term — **Worker Slot** (a.k.a. Assignment): the durable,
-  deterministic execution unit that carries one issue and *spawns* disposable workers for its
-  reasoning steps. Doc 16 is the slot's state machine; doc 05's "worker" stays the ephemeral step. A
-  **state-mapping table** (16 ↔ 03) and cross-links were added to 02/03/05.
-- **Owner decision needed:** confirm the vocabulary. Option A (current): *Worker Slot* (durable) +
-  *Worker* (ephemeral). Option B: rename the durable unit to **Assignment** or **Job** to remove the
-  word "worker" from the durable concept entirely (arguably clearer, but diverges from the requested
-  doc title "WorkerStateMachine"). Recommendation: keep A, it satisfies the requested doc names.
+- **24 docs** present (00–22 + this review + README target). **0 broken internal links.**
+- No leftover `brain.db`; no leftover `runs`-table references; invariant cross-refs consistent
+  (A-*). Worker count "exactly four" consistent; `maxAttempts=3` consistent across 03/13/16/17/20;
+  port 8790 consistent; engine-home path consistent.
 
-## 2. Over-engineering candidates (Law 17 — simplify)
+## Findings
 
-- **Advisory file/folder/module locks ([15](15_LockManager.md) §4–6).** With worktree-per-issue +
-  tiny branches + immediate merge + low `maxConcurrent` (default 3), same-file collisions are rare
-  and the Integrator already resolves tiny conflicts. **Recommendation:** ship v1 with only the
-  **hard** locks (device, issue, merge); implement advisory module/file locks **later**, *only if*
-  measured merge-conflict rate justifies them. Keep the design in 15 (it's correct) but mark it
-  Phase-2. This removes real complexity from the first build without losing the option.
-- **`repo` lock `shared` mode ([15](15_LockManager.md) §2/16).** The only use of shared-mode locking,
-  for rare repo-wide refactors. **Recommendation:** drop `shared` mode (and possibly the `repo`
-  scope) for v1; a `module` lock covers the realistic cases. Re-add if a real need appears.
-- **Net effect:** v1 Lock Manager = device + issue + merge (hard) only. Simpler, still satisfies
-  Laws 10/11 and every hard invariant (L-1…L-6 hold; advisory-lock invariants become no-ops).
+### Over-engineering — addressed
+- The Round-1 over-engineering flag (advisory locks) is **resolved**: they're now Future-only. V1 lock
+  surface is minimal (3 hard locks) and still satisfies every hard invariant (L-1…L-6). ✔
+- No other subsystem is heavier than its job. The Decision Engine *reduces* complexity by centralizing
+  rules rather than adding a layer.
 
-## 3. Duplication (acceptable, with a note)
+### Duplicate concepts — controlled
+- **Decision logic** previously appeared in 03/16/17. Now **doc 20 is authoritative**; 16/17 reference
+  it ("the Decision Engine chooses"). Remaining prose in 16/17 is descriptive, not a second rule set.
+  ✔ (Recommendation: at implementation, 16/17 should not re-encode thresholds — import them from 20.)
+- **Hardware gate lists** still appear in both 10 and 17. Unchanged from Round 1: acceptable because
+  both reference the plugin manifest as the eventual single source ([18](18_PlugInContract.md)).
+  Low-priority cleanup, not a contradiction.
+- **Deferral** is described in 03/06/10/17/20/22 — but each from its own angle (workflow / QA / hardware
+  / repair / decision rule / migration classification). One definition (Law 7 + doc 06); others
+  reference it. No divergence found. ✔
 
-- **Hardware gates appear in both [10_Hardware](10_Hardware.md) and [17_RepairLoop](17_RepairLoop.md).**
-  Doc 10 is the **authority** (the hard PASS/FAIL gates + honesty rules); doc 17 restates them as the
-  Verify step per domain. This is intentional (17 is the uniform loop view) and 17 links back to 10,
-  but the gate *lists* are duplicated. **Recommendation:** at implementation time, make the gate list
-  live in the **plugin manifest** ([18](18_PlugInContract.md)) as the single source, and have both
-  docs reference it rather than re-enumerate. Low priority; not a contradiction.
-- **QA rungs vs repair Verify.** [06_QA](06_QA.md) (rungs) and [17](17_RepairLoop.md) (Verify) overlap
-  by design; 17's Verify == QA's chosen rung. Cross-linked; fine.
+### Contradictions — none blocking
+- The former worker-vs-slot contradiction is fully resolved by the Assignment rename + the mapping
+  table in [16](16_WorkerStateMachine.md). ✔
+- Brain split is consistent across 02/04/12/14/16/19. ✔
 
-## 4. Token-waste audit — clean
+### Unnecessary AI / token waste / large prompts — clean
+- Migration (22) and the Decision Engine (20) are deterministic; AI is confined to: plan, code, QA
+  judgment, ambiguous-duplicate judgment, AC drafting, and one optional architecture-prose refinement.
+- Prompts remain the six small slices from the **Knowledge Brain** (P9). Execution bookkeeping
+  (attempt counts, metrics, locks) never enters a prompt — it feeds the Decision Engine instead.
+- No whole-repo prompt path exists; the one escalation that "deepens context" is a bounded
+  dependency-graph slice ([17](17_RepairLoop.md)), not a repo dump.
 
-- Every deterministic step (Observe/Verify/build/screenshot/DRC/merge/lock) is Go (Laws 5/6/18).
-- Only Planning/Coding/QA/(rare Integrator) spend tokens (16 W-2).
-- Plugin `Repair()` runs **deterministic** auto-fixes *before* spawning a Developer, saving tokens
-  ([18](18_PlugInContract.md) §9). Good.
-- AC generation is deterministic first (`GenerateAcceptanceCriteria`), AI only refines. No double-AI.
-- One residual risk to watch in implementation: the "deepen context once" escalation
-  ([17](17_RepairLoop.md)) must stay a *dependency-graph slice*, never a whole-repo dump (Law 14).
+### Subsystems that could merge — considered, kept separate on purpose
+- **Decision Engine vs Orchestrator:** could be one component, but keeping `Decide()` pure and separate
+  makes it unit-testable and keeps the state machine thin. Keep separate.
+- **Knowledge Brain vs Execution State:** deliberately separate (the whole point of the split). Keep.
+- **Migration vs Orchestrator:** migration is a one-shot phase with a human gate; folding it into the
+  runtime loop would complicate both. Keep separate, invoked by `cwv2 migrate`.
 
-## 5. Missing pieces — now covered
+### Things that became (or already are) deterministic Go — confirmed
+- Locking, merging, gate PASS/FAIL, decisions, repo/Jira analysis, duplicate detection (similarity),
+  device discovery, dependency graph, prompt assembly, migration validations. AI only where reasoning
+  is irreducible. ✔ (Law 18 holds across the spec.)
 
-The extension added the previously-thin areas: full **lock lifecycle/recovery/fencing** (15), every
-**state transition** with entry/exit/timeout/recovery (16), the **repair loop** per domain with
-stop/split/defer rules (17), the **uniform plugin interface** (18), and the **system laws** (19).
-Failure/recovery cases now covered end-to-end: worker crash, machine reboot, cancellation, merge
-conflict, stuck-loop, budget exhaustion, missing resource/human block, zombie-write (fencing).
+### Minor / cosmetic (non-blocking)
+- `18_PlugInContract.md` keeps the `PlugIn` casing (owner-specified filename). Suggest normalizing to
+  `PluginContract` at freeze; one-line index change. Deferred to owner.
+- Doc 16's H1 is "Worker State Machine (Assignment Lifecycle)" to preserve the requested title while
+  using the new vocabulary. Fine.
 
-## 6. Broken references — none
+## Open decisions (for the owner)
 
-Automated link check across all docs + README: **0 broken internal links**. Every `NN_Name.md`
-reference and the `../README.md` back-link resolve.
+1. **ClaudeWorker field type/name in Jira** — doc 22 assumes a single-select custom field named
+   `ClaudeWorker` with values Enable/Disable/Manual Only/Needs Review. Confirm the exact field name/ID
+   and whether it's global or project-scoped (needed before S9/migration apply).
+2. **Thresholds** — `abandonedDays`, `largeThreshold`, `splitThreshold`, `imgdiff_tolerance`,
+   per-scope lock TTLs. Defaults are proposed in 13/15/20/22; confirm or adjust (tunable later, but
+   S9/S8 need starting values).
+3. **`18_PlugInContract.md` rename** — normalize casing at freeze, or leave as-is? (cosmetic)
+4. **Future advisory locks** — agreed as Future/S13-gated. Confirm the metric that would trigger
+   building them (e.g. ">X% of merges hit a real conflict").
 
-## 7. Rename / cleanup suggestions (cosmetic)
+None of these block freezing the *architecture*; they are inputs the *implementation* (S8/S9) will
+need.
 
-- **File casing:** `18_PlugInContract.md` uses `PlugIn` while every other reference uses `Plugin`/
-  `Plugins`. Kept as-is because the brief specified that exact filename; **suggest** normalizing to
-  `18_PluginContract.md` at freeze for consistency (one-line index update).
-- **"Integrator" worker:** it's invoked only on semantic merge conflict (≈1% of merges); 99% of
-  merges are pure Go. It's correctly listed as one of the four workers, but it's barely a reasoning
-  worker. No change needed — just don't build heavy machinery around it.
+## Freeze recommendation
 
-## Recommended actions before freeze
+**Recommend: FREEZE.**
 
-1. **Accept the "Worker Slot" vocabulary** (or choose Assignment/Job) — §1.
-2. **Scope the Lock Manager v1 to hard locks only** (device/issue/merge); mark advisory + repo-shared
-   as Phase-2 — §2. *(This is the main simplification.)*
-3. **Move gate lists into plugin manifests** as the single source; keep 10/17 as references — §3.
-4. *(Optional, at freeze)* normalize `18_PlugInContract.md` → `18_PluginContract.md` — §7.
+The specification is internally consistent (0 broken links, no contradictions), minimal (Law 17
+honored — Lock Manager V1 trimmed, no speculative subsystems), deterministic-first (Law 18 holds), and
+complete for construction: the Implementation Roadmap (21) gives an unambiguous, dependency-ordered
+build plan with milestones and rollback, and the Migration spec (22) defines a safe, reusable
+first-phase for any project.
 
-None of these require rewriting the specification; 2–4 are annotations/scoping the implementation will
-honor. With §1 confirmed, the architecture is ready to **freeze**.
+On freeze:
+- Tag the docs as `architecture-frozen` and treat changes as spec-versioned (Law-compliant amendments
+  only).
+- Begin implementation at **S0** per [21](21_ImplementationRoadmap.md) — deterministic core first,
+  zero tokens through M0, no subsystem out of order.
+- Resolve the four open decisions above **before S8/S9** (they aren't needed for S0–S7).
+
+Until the owner says "freeze", the architecture remains open and no code is written.

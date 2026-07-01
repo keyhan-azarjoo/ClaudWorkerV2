@@ -43,7 +43,7 @@ The authoritative component map. Everything else in `docs/` refines a box drawn 
 
 ### 2. Orchestrator (the state machine)
 - Deterministic Go. Owns the **issue lifecycle** in [03_Workflow](03_Workflow.md) (execution view:
-  the worker-slot state machine in [16_WorkerStateMachine](16_WorkerStateMachine.md)). For each active
+  the **Assignment** state machine in [16_WorkerStateMachine](16_WorkerStateMachine.md)). For each active
   issue it decides the next stage and either (a) runs a deterministic step itself or (b) asks the
   Worker Runner to spawn the right worker with an assembled prompt.
 - Enforces the bounded Developer↔QA retry loop (the universal [17_RepairLoop](17_RepairLoop.md)),
@@ -136,8 +136,8 @@ judgment. Adding a new deterministic capability = a new Go tool, never a new pro
 |---|---|---|
 | What work exists | Jira | **Jira** (P2) |
 | Code | GitHub / local clones | **Git** (P3) |
-| Knowledge (decisions, indexes, failures) | Brain (SQLite + md) | **Brain** (P4) |
-| Coordination (locks, run status, cache) | SQLite | Engine (ephemeral, rebuildable) |
+| Knowledge (architecture, decisions, standards, rules, index, patterns, qa-maps) | **Knowledge Brain** (`knowledge.db` + `knowledge/` md) | **Knowledge Brain** (P4) — persistent |
+| Execution (assignments, progress, retries, metrics, locks, deferral tracking, Jira cache) | **Execution State** (`state.db`) | Engine — temporary, rebuildable |
 | Config | `cwv2.yaml` per project | Owner |
 | Secrets | keychain / Azure KV | Vault (never in repo) |
 
