@@ -5,7 +5,7 @@ short-lived, stateless, and disposable: created for one reasoning step, given a 
 torn down (P4, P5, P9). Everything else is deterministic Go.
 
 > A "worker" here is one ephemeral `claude -p` reasoning step. The durable execution unit that
-> *drives* an issue and *spawns* these workers is the **Worker Slot**, whose full lifecycle is
+> *drives* an issue and *spawns* these workers is the **Assignment**, whose full lifecycle is
 > [16_WorkerStateMachine](16_WorkerStateMachine.md). The Developer↔QA cycle these workers run inside
 > is the universal [17_RepairLoop](17_RepairLoop.md).
 

@@ -1,119 +1,132 @@
-# 04 — Project Brain
+# 04 — Project Brain (Knowledge Brain + Execution State)
 
 > **No AI session is the source of truth. The Project Brain is.** Workers are disposable; knowledge
 > is permanent (P4).
 
-The Brain is the Engine's durable, deterministically-maintained knowledge store for **one project**.
-It exists so that (a) prompts stay small and relevant (P9), and (b) nothing important dies with a
-worker session.
+The Project Brain is split into **two independent stores** with different lifetimes, so persistent
+knowledge is never at risk from transient execution churn:
 
-## What the Brain is (and is not)
+1. **Knowledge Brain** — *persistent knowledge only*: architecture, patterns, standards, decisions,
+   rules, and the derived-but-durable indexes/maps. Survives forever; backed up; git-diffable.
+2. **Execution State** — *temporary execution state only*: assignments, progress, retries, metrics,
+   locks, deferral tracking, event log, Jira cache. Rebuildable and disposable; wiping it loses no
+   knowledge.
 
-- **Is:** a local store of *knowledge about the project* — architecture summary, decisions, a
-  file/symbol index, dependency graph, per-issue history, known failures, deferrals, and QA maps.
-- **Is not:** the source of truth for *work* (that's Jira) or *code* (that's Git). The Brain never
-  contradicts them; it *summarizes and indexes* them and adds knowledge that isn't otherwise
-  recorded (why decisions were made, what failed, what's deferred).
-- **Rebuildable:** the mechanical parts (indexes, graphs, summaries) can be regenerated from the
-  repo + Jira at any time. Only the *authored* knowledge (decisions, failure notes, deferrals) is
-  irreplaceable, and that is stored as append-only, git-diffable records.
+This separation is a hard rule: **the two never mix.** You can delete the entire Execution State and
+restart with the Knowledge Brain intact; you can back up the Knowledge Brain without dragging along
+volatile run data.
 
-## Storage
+## Why split them
 
-Two layers, both under the engine home on the SSD, per project:
+- **Safety:** a corrupt/rebuilt Execution State can never damage decisions, standards, or learned
+  patterns.
+- **Backup/versioning:** the Knowledge Brain (small, high-value, slow-changing) is exported/committed;
+  the Execution State (large, fast-changing, throwaway) is not.
+- **Clarity:** every datum has one home. "Is this knowledge or execution?" has a definite answer,
+  which keeps prompts small (only Knowledge Brain feeds prompts) and the model out of execution
+  bookkeeping.
+
+## What each store holds
+
+### Knowledge Brain (persistent)
+| Content | Form | Notes |
+|---|---|---|
+| **Architecture** summary | `knowledge/architecture.md` | short (≤2 KB), the "Architecture Summary" prompt slice (P9) |
+| **Patterns** (learned failure patterns, idioms) | `knowledge.db` | known-failure signatures + resolutions; reusable code idioms |
+| **Standards / conventions** | `knowledge/conventions.md` | coding standards confirmed for this project |
+| **Decisions / ADRs** | `knowledge/decisions/NNNN-*.md` (+ index in `knowledge.db`) | append-only; "recent decisions" prompt slice |
+| **Rules** | `knowledge/rules.md` | project-specific hard rules (e.g. owner gates), referenced by config |
+| **File & symbol index** | `knowledge.db` | derived from repo; enables relevant-files selection |
+| **Dependency graph** | `knowledge.db` | derived; expands relevant-files minimally |
+| **QA maps & goldens** | `knowledge.db` + artifacts | navigation maps + baseline screenshots |
+| **Glossary** | `knowledge/glossary.md` | domain terms |
+
+All Knowledge-Brain content is either **authored** (decisions, rules, conventions, architecture) or
+**derived-and-durable** (index, graph, qa-maps). Derived parts are rebuildable from the repo; authored
+parts are the irreplaceable core and are stored as git-diffable markdown + an index row.
+
+### Execution State (temporary)
+| Content | Form | Notes |
+|---|---|---|
+| **Assignments** | `state.db` (`assignments`) | one row per issue execution ([16_WorkerStateMachine](16_WorkerStateMachine.md)) |
+| **Progress** | `state.db` (`assignments`, `events`) | current state, live progress, evidence refs |
+| **Retries** | `state.db` (`assignments.attempt`) | attempt counters, stuck-detector signals ([20_DecisionEngine](20_DecisionEngine.md)) |
+| **Metrics** | `state.db` (`assignments`, `metrics`) | tokens, cost, durations, gate pass-ratios |
+| **Locks** | `state.db` (`locks`) | issue/device/merge leases ([15_LockManager](15_LockManager.md)) |
+| **Deferral tracking** | `state.db` (`deferrals`) | open deferrals + follow-up keys (the *how-to* text lives in Knowledge Brain) |
+| **Jira cache** | `state.db` (`issues_cache`) | last-known Jira snapshot + `dirty_writes` |
+
+Full schema in [12_Database](12_Database.md).
+
+## Storage layout (per project, on the SSD — C-6)
 
 ```
 <engine-home>/projects/<project>/
-  brain.db            # SQLite: indexes, graphs, issue history, failures, deferrals, embeddings-lite
-  knowledge/          # human-readable markdown, git-diffable
-    architecture.md   # the maintained architecture summary (short)
-    decisions/        # one ADR per file: NNNN-title.md
-    conventions.md    # coding conventions extracted/confirmed for this project
-    glossary.md       # domain terms
+  knowledge.db            # Knowledge Brain: index, graph, patterns, qa-maps, ADR index
+  knowledge/              # Knowledge Brain (human-readable, git-diffable, backed up)
+    architecture.md
+    conventions.md
+    rules.md
+    glossary.md
+    decisions/            # NNNN-title.md ADRs
+  state.db                # Execution State: assignments, progress, retries, metrics, locks, deferrals, jira cache
+  worktrees/<ISSUE-KEY>/  # per-assignment git worktrees
+  artifacts/              # screenshots, renders, evidence (referenced by both stores)
 ```
 
-- **SQLite** for queryable, structured, high-churn data (file index, symbols, dependency edges,
-  issue runs, failures). Schema in [12_Database](12_Database.md).
-- **Markdown** for authored, low-churn, human-valuable knowledge (architecture summary, ADRs,
-  conventions). Kept small and skimmable.
+`<engine-home>` defaults to `/Volumes/Extreme SSD/cwv2-home/`.
 
-## Contents
+## How prompts are assembled — from the Knowledge Brain only (P9)
 
-### 1. Architecture summary (`knowledge/architecture.md`)
-A **short** (target ≤ 2 KB) description of the project's real architecture: main modules, entry
-points, key boundaries, how to build/run/test. Maintained deterministically where possible (from
-the file index and build config) and refined by the Manager worker when it learns something durable.
-This is the "Architecture Summary" injected into every prompt (P9).
+For a given issue and stage, the Orchestrator builds the prompt from **only** these slices, all drawn
+from the **Knowledge Brain** (never from Execution State):
 
-### 2. Decisions / ADRs (`knowledge/decisions/NNNN-*.md`)
-Append-only architecture decision records: context, decision, consequences, links to the issue that
-produced it. Workers propose ADRs via a tool; the Engine writes them. The **recent decisions** slice
-(last K relevant ADRs) is injected into prompts so workers don't re-litigate settled choices.
-
-### 3. File & symbol index (SQLite)
-Deterministic Go indexer walks the repo and records files, languages, sizes, top-level symbols
-(functions/classes/exports), and per-file summaries. Enables **relevant-files selection** without an
-AI reading the whole tree. Refreshed on schedule and after each merge.
-
-### 4. Dependency graph (SQLite)
-Deterministic import/reference graph (per language/plugin). Used to expand "relevant files": given
-the files a plan touches, include their close neighbors. Keeps context minimal but sufficient.
-
-### 5. Per-issue history (SQLite)
-For each Jira issue the Engine works: the plan, branches, attempts, checks run, QA verdicts,
-failures, final outcome, tokens/cost. Feeds the dashboard and lets a re-opened issue resume with
-context instead of from zero.
-
-### 6. Known failures (SQLite)
-Structured records of failures seen (build error signatures, flaky tests, environment gotchas) with
-their resolution if known. Injected as **current failures** context when relevant, so a Developer
-worker doesn't repeat a known dead-end.
-
-### 7. Deferrals (SQLite)
-Every deferred check (FR-18): what, why, how to run later, follow-up Jira key, environment needed.
-Surfaced on the dashboard; swept periodically to see if the environment is now available.
-
-### 8. QA maps (SQLite + artifacts)
-App/screen maps, navigation graphs, and **golden screenshots** (baseline images) per screen/state,
-used by human-like QA to navigate and to image-diff (see [06_QA](06_QA.md)). Artifacts (images)
-stored on disk, referenced by the DB.
-
-## How prompts are assembled from the Brain (P9)
-
-For a given issue and stage, the Orchestrator builds the prompt from **only** these slices:
-
-1. **Task** — the Jira issue summary + description (from Jira, cached).
-2. **Acceptance Criteria** — parsed from the issue / produced by the Manager.
-3. **Relevant Files** — selected via the file index + dependency graph, scoped to the plan; file
-   contents included only for the few files in scope, truncated intelligently.
-4. **Architecture Summary** — `knowledge/architecture.md` (short).
+1. **Task** — Jira issue summary + description (from the Jira cache, but that is Task *content*, not
+   execution bookkeeping).
+2. **Acceptance Criteria** — parsed / plugin-generated / Manager-refined.
+3. **Relevant Files** — selected via the file index + dependency graph, scoped to the plan.
+4. **Architecture Summary** — `knowledge/architecture.md`.
 5. **Recent Decisions** — top-K relevant ADRs.
-6. **Current Failures** — structured failures from the last attempt(s) for this issue + matching
-   known-failure records.
+6. **Current Failures** — the *structured failure text* from the last attempt (the failure's content),
+   matched against known-failure **patterns** in the Knowledge Brain. (The attempt *count* is
+   Execution State and is used by the Decision Engine, not the prompt.)
 
-Nothing else. No whole-repo dumps, no unrelated history (P9). All selection is deterministic Go, so
-assembling context costs **zero model tokens**.
+No whole-repo dumps, no unrelated history, no execution bookkeeping in prompts. All selection is
+deterministic Go → assembling context costs **zero** model tokens.
 
-## Maintenance (deterministic, scheduled)
+## Maintenance
 
-- On startup and on interval: re-index changed files, update the dependency graph, refresh the
-  architecture summary's mechanical parts.
-- After every merge: incrementally re-index the merged files; append the issue's history record.
-- Nightly (or on demand): compact the DB, prune stale cache rows, verify Brain is rebuildable.
+- **Knowledge Brain (deterministic, scheduled):** re-index changed files, update the dependency graph,
+  refresh the architecture summary's mechanical parts; after each merge, incrementally re-index and
+  append any new ADRs / learned patterns.
+- **Execution State (deterministic, continuous):** the Orchestrator writes assignment/progress/metric
+  rows as it runs; the reaper prunes closed assignments and stale locks; the whole store can be
+  dropped and rebuilt from Jira + Git + Knowledge Brain (NFR-7).
 
 ## Writing to the Brain (workers)
 
-Workers never write DB rows directly. They call deterministic tools:
-- `brain.add_decision(context, decision, consequences)` → writes an ADR.
-- `brain.note_failure(signature, detail, resolution?)` → records a known failure.
-- `brain.add_deferral(kind, reason, howto, followup_key)` → records a deferral.
-- `brain.update_architecture(section, text)` → proposes an architecture-summary edit (Engine
-  validates size/format).
+Workers never write DB rows directly. They call deterministic tools; the Engine routes each write to
+the correct store:
+- `knowledge.add_decision(context, decision, consequences)` → Knowledge Brain ADR.
+- `knowledge.note_pattern(signature, detail, resolution?)` → Knowledge Brain learned pattern.
+- `knowledge.update_architecture(section, text)` → Knowledge Brain (validated size/format).
+- `defer.add(kind, reason, howto, followup_key)` → Execution State deferral row **+** the reusable
+  *how-to* stored in Knowledge Brain rules/patterns.
 
 The Engine validates and persists; the worker's session can then vanish with nothing lost (P4).
 
+## Rebuildability & backup (NFR-7)
+
+- **Execution State** is fully rebuildable from Jira (work truth) + Git (code truth) + Knowledge Brain
+  and is therefore never backed up — losing it costs only in-flight run history.
+- **Knowledge Brain**: derived parts (index/graph/qa-maps) rebuild from the repo; authored parts
+  (decisions/rules/conventions/architecture) are exported as markdown and periodically committed to a
+  knowledge repo (aligns with the owner's memory-backup practice), so an SSD loss never loses a
+  decision.
+
 ## Portability
 
-The Brain schema and tools are project-agnostic. Onboarding a new project creates a fresh
-`projects/<project>/` and the deterministic indexers populate it from that project's repo — no
-engine changes (P10, [13_Config](13_Config.md)).
+Both stores are project-agnostic. Onboarding a new project creates a fresh `projects/<project>/`; the
+**migration phase** ([22_Migration](22_Migration.md)) populates the initial Knowledge Brain
+(architecture, frameworks, standards, structure, technologies, plugins, summary) and an empty
+Execution State — no engine changes (P10).
