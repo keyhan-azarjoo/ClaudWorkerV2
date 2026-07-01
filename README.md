@@ -61,6 +61,11 @@ Read them in order. Each is complete and they are mutually consistent.
 | 12 | [Database](docs/12_Database.md) | Engine state schema |
 | 13 | [Config](docs/13_Config.md) | The only project-specific surface |
 | 14 | [Deployment](docs/14_Deployment.md) | Install, run, operate, portability |
+| 15 | [Lock Manager](docs/15_LockManager.md) | Deterministic locking: scopes, fencing, deadlock/crash recovery |
+| 16 | [Worker State Machine](docs/16_WorkerStateMachine.md) | Worker-slot lifecycle (Idle→…→Done/Blocked/Cancelled/Failed) |
+| 17 | [Repair Loop](docs/17_RepairLoop.md) | The universal Observe→Analyse→Repair→Verify loop, per domain |
+| 18 | [Plugin Contract](docs/18_PlugInContract.md) | Uniform capability interface every plugin implements |
+| 19 | [System Laws](docs/19_SystemLaws.md) | The 18 immutable laws the whole system obeys |
 
 ## License
 

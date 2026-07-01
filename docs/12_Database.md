@@ -26,7 +26,9 @@ SQL types illustrative; final DDL ships with the implementation. Times are UTC I
 
 ### Coordination
 
-**`locks`** — mutual exclusion (issue locks, merge lock, hardware-access locks).
+**`locks`** — mutual exclusion (issue locks, merge lock, hardware-access locks). The full scope set,
+fencing token, and semantics are specified in [15_LockManager](15_LockManager.md) §16 (which extends
+this table with `repo`, `fence`, `advisory`).
 | col | type | notes |
 |---|---|---|
 | id | text pk | e.g. `issue:SCRUM-123`, `merge:app`, `hw:esp32-s3-a` |
