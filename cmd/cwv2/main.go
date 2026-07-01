@@ -43,6 +43,10 @@ func run(args []string) int {
 		return cmdDoctor(args[1:])
 	case "init":
 		return cmdInit(args[1:])
+	case "git":
+		return cmdGit(args[1:])
+	case "jira":
+		return cmdJira(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return 0
@@ -60,6 +64,11 @@ usage:
   cwv2 version
   cwv2 init   --config <cwv2.yaml>
   cwv2 doctor --config <cwv2.yaml> [--json]
+  cwv2 git    <subcommand> --repo <path> ...      (deterministic Git toolbelt; JSON output)
+  cwv2 jira   <subcommand> --config <cwv2.yaml> ... (deterministic Jira toolbelt; JSON output)
+
+  cwv2 git    help
+  cwv2 jira   help
 `)
 }
 
