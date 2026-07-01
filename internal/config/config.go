@@ -32,12 +32,13 @@ type Config struct {
 }
 
 type Jira struct {
-	BaseURL   string                `yaml:"base_url"`
-	Auth      SecretPair            `yaml:"auth"`
-	WorkJQL   string                `yaml:"work_jql"`
-	StatusMap map[string]StringList `yaml:"status_map"`
-	ACField   string                `yaml:"ac_field"`
-	Labels    map[string]string     `yaml:"labels"`
+	BaseURL         string                `yaml:"base_url"`
+	Auth            SecretPair            `yaml:"auth"`
+	WorkJQL         string                `yaml:"work_jql"`
+	StatusMap       map[string]StringList `yaml:"status_map"`
+	ACField         string                `yaml:"ac_field"`
+	Labels          map[string]string     `yaml:"labels"`
+	AutomationField string                `yaml:"automation_field"` // custom field id for the Automation select (owner decision 1)
 }
 
 // StringList accepts either a single scalar or a YAML sequence, always yielding []string.

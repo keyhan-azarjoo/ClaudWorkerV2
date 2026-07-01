@@ -21,20 +21,32 @@ is implemented in **Go** so no tokens are ever spent on work a program can do.
 | Repo created (`myotgo/ClaudWorkerV2`, private) | ✅ |
 | Architecture docs (`docs/00`–`docs/22` + review) | ✅ complete |
 | Architecture frozen | 🧊 **v2.0.0** (2026-07-01) |
-| Implementation | ▶️ **S0 complete** (foundations: config, engine-home, logging, secrets, `cwv2 doctor`) — S1 next |
+| Implementation | ▶️ **S0–S1 complete** (foundations + deterministic Git/Jira toolbelt + CLI) — S2 next |
 
-### Build & run (S0)
+### Build & run (S0–S1)
 
 ```
 go build -o bin/cwv2 ./cmd/cwv2
 ./bin/cwv2 version
-./bin/cwv2 init   --config configs/cwv2.example.yaml
 ./bin/cwv2 doctor --config configs/cwv2.example.yaml
+
+# Deterministic Git toolbelt (JSON output) — workers call these, never git directly
+./bin/cwv2 git commit       --repo <path> --message "msg"
+./bin/cwv2 git branch-create --repo <path> --name agent/KEY-slug --base development
+./bin/cwv2 git worktree-add  --repo <path> --path <wt> --branch agent/KEY-slug --base development
+./bin/cwv2 git merge         --repo <path> --branch agent/KEY-slug --message "merge"
+./bin/cwv2 git help
+
+# Deterministic Jira toolbelt (JSON output) — needs base_url + auth secrets in config
+./bin/cwv2 jira health      --config configs/cwv2.example.yaml
+./bin/cwv2 jira search      --config configs/cwv2.example.yaml --jql 'project = SCRUM'
+./bin/cwv2 jira help
+
 go test ./...
 ```
 
-S0 spends **zero tokens**. Per the [roadmap](docs/21_ImplementationRoadmap.md), each subsystem must
-pass unit + integration + architecture-compliance + performance gates before the next; S0 has.
+Every subsystem spends **zero tokens**. Per the [roadmap](docs/21_ImplementationRoadmap.md), each must
+pass unit + integration + architecture-compliance + performance gates before the next; S0 and S1 have.
 
 ## Relationship to V1
 
