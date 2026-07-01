@@ -1,0 +1,66 @@
+# Example ClaudWorker V2 project config (docs/13_Config.md).
+# Secrets are referenced by NAME only — never values (NFR-6). Thresholds are configurable
+# defaults, never hardcoded in the engine (owner decision 2).
+
+project: example
+engine_home: /Volumes/Extreme SSD/cwv2-home
+
+jira:
+  base_url: https://example.atlassian.net
+  auth: { user_secret: jira_user, token_secret: jira_token }   # names -> vault
+  work_jql: 'project = EX AND status = "Ready" AND assignee = currentUser() ORDER BY priority DESC, rank ASC'
+  status_map:
+    ready:       ["Ready", "Selected for Development"]
+    in_progress: "In Progress"
+    in_review:   "In Review"
+    done:        "Done"
+  ac_field: description
+  labels: { needs_human: needs-human, owner_working: owner-working, deferred: deferred, engine: engine }
+  # Automation: single-select custom field (Enabled/Disabled/Manual Only/Needs Review) — owner decision 1.
+
+github:
+  user: keyhan-azarjoo
+  commit_identity: { name: keyhanazarjoo, email: keyhanazarjoo@gmail.com }   # author identity (C-2)
+
+repos:
+  - name: app
+    url: https://github.com/example/app
+    dev_branch: development
+    plugin: flutter
+  - name: backend
+    url: https://github.com/example/backend
+    dev_branch: development
+    plugin: dotnet
+
+component_map:
+  App: app
+  Backend: backend
+
+workflow:
+  max_concurrent: 3
+  merge: { strategy: no-ff, delete_branch: true }
+  refresh_before_gates: true
+
+# Tunable thresholds — override any of these per project without recompiling.
+defaults:
+  abandoned_days: 30
+  large_issue_threshold: 8
+  split_threshold: 5
+  imgdiff_threshold: 0.02
+  lock_ttl:      { issue: 3600, device: 1800, merge: 300 }
+  retry_limits:  { max_attempts: 3, flaky_retries: 2, merge_refresh: 3 }
+
+usage_guard:
+  provider: claude-cli
+  pause_pct: 95
+  resume_pct: 90
+  fail_open: true
+
+qa:
+  prefer_real_device: true
+  imgdiff_tolerance: 0.02
+
+dashboard:
+  bind: 127.0.0.1
+  port: 8790
+  token: auto

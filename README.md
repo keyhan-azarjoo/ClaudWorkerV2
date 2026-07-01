@@ -21,7 +21,20 @@ is implemented in **Go** so no tokens are ever spent on work a program can do.
 | Repo created (`myotgo/ClaudWorkerV2`, private) | ✅ |
 | Architecture docs (`docs/00`–`docs/22` + review) | ✅ complete |
 | Architecture frozen | 🧊 **v2.0.0** (2026-07-01) |
-| Implementation | ▶️ Subsystem **S0** (per [roadmap](docs/21_ImplementationRoadmap.md)) |
+| Implementation | ▶️ **S0 complete** (foundations: config, engine-home, logging, secrets, `cwv2 doctor`) — S1 next |
+
+### Build & run (S0)
+
+```
+go build -o bin/cwv2 ./cmd/cwv2
+./bin/cwv2 version
+./bin/cwv2 init   --config configs/cwv2.example.yaml
+./bin/cwv2 doctor --config configs/cwv2.example.yaml
+go test ./...
+```
+
+S0 spends **zero tokens**. Per the [roadmap](docs/21_ImplementationRoadmap.md), each subsystem must
+pass unit + integration + architecture-compliance + performance gates before the next; S0 has.
 
 ## Relationship to V1
 
