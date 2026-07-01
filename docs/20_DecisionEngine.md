@@ -29,7 +29,7 @@ Execution State + Knowledge Brain + tool outputs:
 |---|---|---|
 | `attempt` (count) | `state.db.assignments` | retry vs escalate |
 | `maxAttempts` | config ([13_Config](13_Config.md)) | retry cap |
-| `gate_results` (per-gate PASS/FAIL/DEFER) | plugin `Verify` ([18_PlugInContract](18_PlugInContract.md)) | repair vs merge vs defer |
+| `gate_results` (per-gate PASS/FAIL/DEFER) | plugin `Verify` ([18_PluginContract](18_PluginContract.md)) | repair vs merge vs defer |
 | `gate_pass_ratio` (now vs prev) | `state.db.metrics` | progress / stuck detection |
 | `failure_fingerprint` (now + history) | Knowledge Brain `patterns` | stuck detection, known dead-ends |
 | `qa_verdict` (PASS/FAIL/DEFER + reasons) | QA worker ([06_QA](06_QA.md)) | merge vs repair vs defer |
@@ -38,7 +38,7 @@ Execution State + Knowledge Brain + tool outputs:
 | `lock_availability` (merge/device) | Lock Manager ([15_LockManager](15_LockManager.md)) | proceed vs wait |
 | `token_budget` / `wallclock` remaining | usage guard + Execution State | abort/escalate on budget |
 | `conflict_kind` (none/textual/semantic) | git tools ([07_Git](07_Git.md)) | merge vs integrator vs escalate |
-| `eligibility` (ClaudeWorker field) | Jira cache ([22_Migration](22_Migration.md)) | admit vs skip |
+| `eligibility` (Automation field) | Jira cache ([22_Migration](22_Migration.md)) | admit vs skip |
 
 No prompt, no model call — assembling a DecisionContext is free.
 
@@ -75,8 +75,8 @@ Recommend/perform decomposition into linked sub-issues ([08_Jira](08_Jira.md),
 - **Rule (any):** `plan_size` exceeds `splitThreshold` (files/modules, config); the plan spans
   **multiple repos/plugins**; fingerprints **oscillate** between two distinct sub-goals; AC has
   independently-shippable items.
-- **Effect:** create linked Jira sub-issues (deterministically), set their ClaudeWorker field to
-  `NeedsReview`, and either continue with the first slice or return the parent to backlog. A worker
+- **Effect:** create linked Jira sub-issues (deterministically), set their Automation field to
+  `Needs Review`, and either continue with the first slice or return the parent to backlog. A worker
   may *propose* the split boundaries; the engine *creates* them.
 
 ### 5. DEFER
@@ -97,8 +97,8 @@ Proceed to integrate ([07_Git](07_Git.md)).
 
 ### 7. ABORT
 Cancel the Assignment cleanly (distinct from Escalate: no human needed, just stop).
-- **Rule:** owner **stop-issue**; issue became ineligible mid-flight (ClaudeWorker flipped to
-  Disable/ManualOnly, or reassigned to a human); duplicate detected (another Assignment already
+- **Rule:** owner **stop-issue**; issue became ineligible mid-flight (Automation flipped to
+  Disabled/Manual Only, or reassigned to a human); duplicate detected (another Assignment already
   merged the equivalent work).
 - **Effect:** cooperative cancel ([15_LockManager](15_LockManager.md)): fence bump, kill worker, clean
   worktree, release locks, return the issue to its prior stable status. Idempotent.
@@ -143,7 +143,7 @@ transient noise.
   **DEFER** the physical check, **MERGE** the rest ([10_Hardware](10_Hardware.md)).
 - **Plan touches app + backend + firmware:** `plan_size` multi-repo → **SPLIT** into three linked
   sub-issues before coding.
-- **Owner flips ClaudeWorker=ManualOnly mid-run:** → **ABORT**, return issue untouched.
+- **Owner flips Automation=Manual Only mid-run:** → **ABORT**, return issue untouched.
 
 ## Interfaces
 

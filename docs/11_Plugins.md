@@ -3,7 +3,7 @@
 Plugins are how one engine supports many project types (Flutter, .NET, web, AI, ESP32, PCB, 3D,
 hardware) **without changing engine source** (P10). A plugin is **data (a manifest) + a set of
 deterministic Go tools**. The **formal interface** every plugin implements (required methods,
-registration, discovery, versioning, health) is [18_PlugInContract](18_PlugInContract.md); this doc
+registration, discovery, versioning, health) is [18_PluginContract](18_PluginContract.md); this doc
 is the conceptual overview. The engine core stays project-agnostic; all domain knowledge about "how do
 I build/test/QA *this kind* of thing" lives in plugins.
 

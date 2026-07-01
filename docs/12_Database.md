@@ -105,7 +105,7 @@ documented future expansion and are unused in V1.
 | status / priority | text | |
 | labels | json | |
 | acceptance | json | parsed AC |
-| claudeworker | text | eligibility field: Enable/Disable/ManualOnly/NeedsReview ([22_Migration](22_Migration.md)) |
+| automation | text | eligibility field: Enabled/Disabled/Manual Only/Needs Review ([22_Migration](22_Migration.md)) |
 | links | json | linked issues |
 | fetched_at | text | staleness marker |
 | dirty_writes | json | outcomes pending write-back to Jira ([08_Jira](08_Jira.md)) |

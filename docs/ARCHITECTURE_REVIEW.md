@@ -18,7 +18,7 @@ that can merge, and anything that can become deterministic Go. **No code was wri
 4. **New doc 20 — Decision Engine:** all control-flow (retry/repair/escalate/split/defer/merge/abort)
    centralized as deterministic rules; removes decision logic scattered across 03/16/17.
 5. **New doc 21 — Implementation Roadmap:** frozen subsystem order S0–S13, milestones M0–M5, rollback.
-6. **New doc 22 — Migration:** the reusable first-phase onboarding (repo+Jira analysis, ClaudeWorker
+6. **New doc 22 — Migration:** the reusable first-phase onboarding (repo+Jira analysis, Automation
    eligibility, normalization, deferral, Knowledge Brain init, validation, human-review gate).
 
 ## Automated checks (this pass)
@@ -41,7 +41,7 @@ that can merge, and anything that can become deterministic Go. **No code was wri
   it ("the Decision Engine chooses"). Remaining prose in 16/17 is descriptive, not a second rule set.
   ✔ (Recommendation: at implementation, 16/17 should not re-encode thresholds — import them from 20.)
 - **Hardware gate lists** still appear in both 10 and 17. Unchanged from Round 1: acceptable because
-  both reference the plugin manifest as the eventual single source ([18](18_PlugInContract.md)).
+  both reference the plugin manifest as the eventual single source ([18](18_PluginContract.md)).
   Low-priority cleanup, not a contradiction.
 - **Deferral** is described in 03/06/10/17/20/22 — but each from its own angle (workflow / QA / hardware
   / repair / decision rule / migration classification). One definition (Law 7 + doc 06); others
@@ -72,42 +72,35 @@ that can merge, and anything that can become deterministic Go. **No code was wri
   device discovery, dependency graph, prompt assembly, migration validations. AI only where reasoning
   is irreducible. ✔ (Law 18 holds across the spec.)
 
-### Minor / cosmetic (non-blocking)
-- `18_PlugInContract.md` keeps the `PlugIn` casing (owner-specified filename). Suggest normalizing to
-  `PluginContract` at freeze; one-line index change. Deferred to owner.
-- Doc 16's H1 is "Worker State Machine (Assignment Lifecycle)" to preserve the requested title while
-  using the new vocabulary. Fine.
+## Owner decisions — RESOLVED and applied (v2.0.0 freeze)
 
-## Open decisions (for the owner)
+The four Round-2 open decisions were resolved by the owner and applied across the spec:
 
-1. **ClaudeWorker field type/name in Jira** — doc 22 assumes a single-select custom field named
-   `ClaudeWorker` with values Enable/Disable/Manual Only/Needs Review. Confirm the exact field name/ID
-   and whether it's global or project-scoped (needed before S9/migration apply).
-2. **Thresholds** — `abandonedDays`, `largeThreshold`, `splitThreshold`, `imgdiff_tolerance`,
-   per-scope lock TTLs. Defaults are proposed in 13/15/20/22; confirm or adjust (tunable later, but
-   S9/S8 need starting values).
-3. **`18_PlugInContract.md` rename** — normalize casing at freeze, or leave as-is? (cosmetic)
-4. **Future advisory locks** — agreed as Future/S13-gated. Confirm the metric that would trigger
-   building them (e.g. ">X% of merges hit a real conflict").
+1. **Automation field** — official Jira **single-select** custom field named **`Automation`** with
+   values **Enabled / Disabled / Manual Only / Needs Review** (not a checkbox, not a label).
+   Applied in 22/20/16/15/12/08.
+2. **Thresholds are configurable, never hardcoded** — `abandoned_days`, `large_issue_threshold`,
+   `split_threshold`, `imgdiff_threshold`, `lock_ttl`, `retry_limits` are project defaults under
+   `defaults:` in [13_Config](13_Config.md); every project overrides without recompiling.
+3. **Plugin naming normalized** — `PlugIn` → `Plugin` everywhere; file renamed to
+   `18_PluginContract.md`; all links updated.
+4. **Advisory locks remain Future-only** — V1 is issue/device/merge; advisory locks are built only
+   when a measurable metric (merge-conflict rate above a configured threshold) justifies them
+   ([15_LockManager](15_LockManager.md) Future expansion).
 
-None of these block freezing the *architecture*; they are inputs the *implementation* (S8/S9) will
-need.
+Also applied at freeze: **restart safety is now Law 19** (a core invariant); the spec is **versioned**
+([SPEC_VERSION.md](../SPEC_VERSION.md)); and an **ACP process** governs future changes
+([ACP_TEMPLATE.md](../ACP_TEMPLATE.md), [21_ImplementationRoadmap](21_ImplementationRoadmap.md)).
 
-## Freeze recommendation
+## Freeze — DONE
 
-**Recommend: FREEZE.**
+**Status: FROZEN at v2.0.0 (2026-07-01).**
 
-The specification is internally consistent (0 broken links, no contradictions), minimal (Law 17
-honored — Lock Manager V1 trimmed, no speculative subsystems), deterministic-first (Law 18 holds), and
-complete for construction: the Implementation Roadmap (21) gives an unambiguous, dependency-ordered
-build plan with milestones and rollback, and the Migration spec (22) defines a safe, reusable
-first-phase for any project.
+The specification is internally consistent (0 broken links, no contradictions), minimal (Law 17 —
+Lock Manager V1 trimmed, no speculative subsystems), deterministic-first (Law 18), crash-safe (Law
+19), and complete for construction: the Implementation Roadmap (21) gives a dependency-ordered build
+plan with per-subsystem gates (unit + integration + architecture-compliance + performance), milestones
+M0–M5, and rollback; the Migration spec (22) defines a safe, reusable first phase.
 
-On freeze:
-- Tag the docs as `architecture-frozen` and treat changes as spec-versioned (Law-compliant amendments
-  only).
-- Begin implementation at **S0** per [21](21_ImplementationRoadmap.md) — deterministic core first,
-  zero tokens through M0, no subsystem out of order.
-- Resolve the four open decisions above **before S8/S9** (they aren't needed for S0–S7).
-
-Until the owner says "freeze", the architecture remains open and no code is written.
+Implementation proceeds strictly in roadmap order, beginning at **S0**, deterministic core first (zero
+tokens through M0). No architecture change is made except via an approved ACP + a spec version bump.

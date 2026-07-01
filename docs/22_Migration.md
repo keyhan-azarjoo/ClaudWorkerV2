@@ -35,7 +35,7 @@ migration is **approved** (`engine.db.projects.migrated_at` set). This is a hard
 
 1. Understand the repository/repositories and produce the initial **project profile**.
 2. Analyze the entire Jira backlog and produce a **migration report** (no destructive action).
-3. Introduce and recommend the **ClaudeWorker eligibility** field per issue.
+3. Introduce and recommend the **Automation eligibility** field per issue.
 4. Propose **task normalization** (splits, separations, acceptance criteria, dependencies, links).
 5. Classify **deferred work** so environmental blockers don't stall development.
 6. Initialize the **Knowledge Brain**.
@@ -52,7 +52,7 @@ Analyze each repo declared in config ([13_Config](13_Config.md)) and produce the
 - **Frameworks** — from manifests (`pubspec.yaml`, `*.csproj`, `package.json`, `platformio.ini`,
   `*.kicad_pcb`, `*.scad`/`*.FCStd`, Dockerfiles, IaC).
 - **Build systems** — how each repo builds/tests/lints (commands, flavors).
-- **Plugins** — which plugin(s) bind to each repo/component via `Detect` ([18_PlugInContract](18_PlugInContract.md)).
+- **Plugins** — which plugin(s) bind to each repo/component via `Detect` ([18_PluginContract](18_PluginContract.md)).
 - **CI** — existing CI config discovered (workflows, runners) — recorded, not required.
 - **Git strategy** — branches present, default/integration branch (expects `development`), protection,
   hooks, commit-identity conventions ([07_Git](07_Git.md)).
@@ -78,27 +78,31 @@ Analyze **every** issue in the configured project and flag, per issue, any of:
 Output: the **migration report** — a per-issue table of flags + recommendations. **No issue is ever
 auto-deleted or auto-closed** — the report *recommends*; the owner decides.
 
-## 3. ClaudeWorker eligibility (new official field)
+## 3. Automation eligibility (new official field)
 
-Migration introduces the official Jira field **`ClaudeWorker`** on every issue, indicating whether
-autonomous workers may process it. Recommended value per issue (never blindly `Enable`):
+Migration introduces the official Jira custom field **`Automation`** on every issue — a
+**single-select** field (**not** a checkbox, and **not** a label) whose value is the authoritative
+way ClaudWorker determines whether an issue may be processed. Allowed values (exactly four):
+**Enabled**, **Disabled**, **Manual Only**, **Needs Review**. Recommended value per issue (never
+blindly `Enabled`):
 
 | Value | Meaning | Typical recommendation trigger |
 |---|---|---|
-| **Enable** | autonomous workers may fully process it | clear AC, single concern, plugin-supported, no blockers |
-| **Disable** | never autonomous | policy-sensitive, deploy/promotion, money/secrets, owner-only |
+| **Enabled** | autonomous workers may fully process it | clear AC, single concern, plugin-supported, no blockers |
+| **Disabled** | never autonomous | policy-sensitive, deploy/promotion, money/secrets, owner-only |
 | **Manual Only** | a human drives; engine may assist read-only | needs human judgment/customer/design |
 | **Needs Review** | eligibility undecided; owner must set it | ambiguous, large, mixed, unclear AC, newly split |
 
 Rules:
 - Default for anything ambiguous/large/mixed/unclear = **Needs Review** (safe default).
-- Issues touching deploy/promotion, payments, secrets, or owner-gated actions = **Disable** or
+- Issues touching deploy/promotion, payments, secrets, or owner-gated actions = **Disabled** or
   **Manual Only** (aligns with never-spend / no-solo-deploy owner rules).
-- The Scheduler only ever claims issues whose `ClaudeWorker == Enable`
+- The Scheduler only ever claims issues whose `Automation == Enabled`
   ([15_LockManager](15_LockManager.md) §3, [08_Jira](08_Jira.md)). Migration **must never** set the
-  whole backlog to Enable.
-- The field is created (as a select field) and populated only on `--apply`, after approval. Its value
-  is cached in `state.db.issues_cache.claudeworker` ([12_Database](12_Database.md)).
+  whole backlog to Enabled.
+- The field is created (as a single-select custom field) and populated only on `--apply`, after
+  approval. Its value
+  is cached in `state.db.issues_cache.automation` ([12_Database](12_Database.md)).
 
 ## 4. Task normalization (proposals only)
 
@@ -108,13 +112,13 @@ For flagged issues, migration **proposes** (does not apply until approved):
   rules; [17_RepairLoop](17_RepairLoop.md)).
 - **Separate** mixed issues by concern/repo.
 - **Suggest acceptance criteria** where missing/unclear — deterministic per-plugin AC
-  (`GenerateAcceptanceCriteria`, [18_PlugInContract](18_PlugInContract.md)) plus a reasoning pass for
+  (`GenerateAcceptanceCriteria`, [18_PluginContract](18_PluginContract.md)) plus a reasoning pass for
   domain-specific AC; written as a **proposed** comment.
 - **Detect dependencies** between issues (shared files/modules via the dependency graph; explicit
   "blocked by" language) and **link related issues** in Jira.
 
 All proposals appear in the report with the exact Jira mutation they would make; the owner approves per
-item or in bulk. Newly created splits/separations get `ClaudeWorker = Needs Review`.
+item or in bulk. Newly created splits/separations get `Automation = Needs Review`.
 
 ## 5. Deferred work classification (deterministic)
 
@@ -155,7 +159,7 @@ architecture prose.
 ## 7. Build validation (deterministic, zero tokens unless reasoning)
 
 Run every deterministic validation the project supports (via plugins,
-[18_PlugInContract](18_PlugInContract.md)), recording results in the report:
+[18_PluginContract](18_PluginContract.md)), recording results in the report:
 
 - **Build** each repo/module.
 - **Tests** (fast suites).
@@ -191,7 +195,7 @@ Migration ends by producing a **final migration report**:
 - Build/validation results and device inventory.
 
 **Nothing changes until the owner approves.** On approval, `cwv2 migrate --apply` performs only the
-**approved, reversible** actions: creating/populating the `ClaudeWorker` field, adding proposed AC
+**approved, reversible** actions: creating/populating the `Automation` field, adding proposed AC
 comments, creating approved splits/links, and finalizing the Knowledge Brain. It **never** deletes or
 closes issues. After apply, `migrated_at` is set and the Scheduler may begin.
 
@@ -215,7 +219,7 @@ normalization ─┼─▶ migration report ─▶ OWNER APPROVES ─▶ apply (
 deferred work ─┤                                                                   │
 brain init    ─┤                                                                   ▼
 build valid.  ─┤                                                          Scheduler admits work
-dashboard init ┘                                                          (only ClaudeWorker=Enable)
+dashboard init ┘                                                          (only Automation=Enabled)
 ```
 
 ## Invariants (migration-specific)
@@ -224,7 +228,7 @@ dashboard init ┘                                                          (onl
 - **MG-2** Migration never deletes or closes a Jira issue; all applied changes are additive and
   reversible.
 - **MG-3** Eligibility is never blanket-Enabled; ambiguous issues default to Needs Review; sensitive
-  ones to Disable/Manual Only.
+  ones to Disabled/Manual Only.
 - **MG-4** Every deterministic step spends zero tokens; AI is used only for genuine reasoning
   (AC drafting, ambiguous-duplicate judgment, prose refinement).
 - **MG-5** Migration is project-agnostic; only config + plugins differ across projects (P10).

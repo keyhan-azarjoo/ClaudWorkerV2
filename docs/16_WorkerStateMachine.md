@@ -96,7 +96,7 @@ For each state: **entry conditions**, **actions**, **exit conditions**, **retry*
 - **Entry:** Assignment has no issue (fresh, or just finished one).
 - **Actions:** none; available to the Scheduler.
 - **Exit:** Scheduler admits an issue (usage guard OK, concurrency < max, issue is top-priority,
-  lockable, and its **ClaudeWorker** field allows autonomous processing — see
+  lockable, and its **Automation** field allows autonomous processing — see
   [22_Migration](22_Migration.md)) → Waiting.
 - **Timeout/recovery:** n/a. An Idle Assignment with an empty backlog is a *success*, not waste (P7).
 
@@ -144,7 +144,7 @@ For each state: **entry conditions**, **actions**, **exit conditions**, **retry*
 
 ### Building (deterministic gate)
 - **Entry:** changes committed.
-- **Actions:** run plugin gates ([11_Plugins](11_Plugins.md), [18_PlugInContract](18_PlugInContract.md)):
+- **Actions:** run plugin gates ([11_Plugins](11_Plugins.md), [18_PluginContract](18_PluginContract.md)):
   build + lint + fast unit tests. Zero tokens. Plugin `Repair()` deterministic auto-fixes run first.
 - **Exit:** all gates pass → QA. Any gate fails → Repair with the structured failure.
 - **Retry:** flaky suites retried a bounded number deterministically ([06_QA](06_QA.md)).
