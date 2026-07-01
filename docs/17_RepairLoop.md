@@ -3,7 +3,7 @@
 The Repair Loop is the heart of ClaudWorker V2. It is the single, uniform way the platform turns "not
 yet passing" into "passing" for **every** project type. The philosophy is identical everywhere; only
 the deterministic **observations** and **verifications** differ (supplied by plugins,
-[11_Plugins](11_Plugins.md) / [18_PlugInContract](18_PlugInContract.md)).
+[11_Plugins](11_Plugins.md) / [18_PluginContract](18_PluginContract.md)).
 
 > **One philosophy, all domains:** Observe → Analyse → Repair → Verify → (pass? stop : repeat),
 > bounded and escalating. Flutter, .NET, a website, a REST API, ESP32 firmware, a PCB, a 3D part,
@@ -133,7 +133,7 @@ runnable gates. It is **not** a pass and is shown as a distinct state ([06_QA](0
 ## Per-domain repair loops
 
 Same loop; domain-specific Observe (evidence) and Verify (gates). Each is a plugin
-([18_PlugInContract](18_PlugInContract.md)). "Deferred" rows are the common human/hardware cases.
+([18_PluginContract](18_PluginContract.md)). "Deferred" rows are the common human/hardware cases.
 
 ### Flutter (app)
 - **Observe:** `flutter analyze`, `flutter test`, build output; launch on device/sim → screenshots;

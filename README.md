@@ -9,17 +9,19 @@ workers are **disposable** and used **only for reasoning**. Every deterministic 
 Jira API, builds, screenshots, image diff, OCR, DRC/ERC, STL export, log parsing, scheduling …)
 is implemented in **Go** so no tokens are ever spent on work a program can do.
 
-> ⚠️ **This repository is design-first.** Implementation does **not** begin until the architecture
-> in [`docs/`](docs/) is frozen and internally consistent. The architecture is the source of truth.
+> 🧊 **Architecture FROZEN at v2.0.0** (see [SPEC_VERSION.md](SPEC_VERSION.md)). The architecture in
+> [`docs/`](docs/) is the source of truth. Implementation targets exactly this version and follows the
+> [Implementation Roadmap](docs/21_ImplementationRoadmap.md) strictly in order. Changes are made only
+> via an approved [Architecture Change Proposal](ACP_TEMPLATE.md).
 
 ## Status
 
 | Phase | State |
 |---|---|
 | Repo created (`myotgo/ClaudWorkerV2`, private) | ✅ |
-| Architecture docs (`docs/00`–`docs/14`) | 🏗️ in progress |
-| Architecture frozen | ⛔ not yet |
-| Implementation | ⛔ blocked on freeze |
+| Architecture docs (`docs/00`–`docs/22` + review) | ✅ complete |
+| Architecture frozen | 🧊 **v2.0.0** (2026-07-01) |
+| Implementation | ▶️ Subsystem **S0** (per [roadmap](docs/21_ImplementationRoadmap.md)) |
 
 ## Relationship to V1
 
@@ -62,10 +64,10 @@ Read them in order. Each is complete and they are mutually consistent.
 | 13 | [Config](docs/13_Config.md) | The only project-specific surface |
 | 14 | [Deployment](docs/14_Deployment.md) | Install, run, operate, portability |
 | 15 | [Lock Manager](docs/15_LockManager.md) | Deterministic locking: scopes, fencing, deadlock/crash recovery |
-| 16 | [Worker State Machine](docs/16_WorkerStateMachine.md) | Worker-slot lifecycle (Idle→…→Done/Blocked/Cancelled/Failed) |
+| 16 | [Worker State Machine](docs/16_WorkerStateMachine.md) | Assignment lifecycle (Idle→…→Done/Blocked/Cancelled/Failed) |
 | 17 | [Repair Loop](docs/17_RepairLoop.md) | The universal Observe→Analyse→Repair→Verify loop, per domain |
-| 18 | [Plugin Contract](docs/18_PlugInContract.md) | Uniform capability interface every plugin implements |
-| 19 | [System Laws](docs/19_SystemLaws.md) | The 18 immutable laws the whole system obeys |
+| 18 | [Plugin Contract](docs/18_PluginContract.md) | Uniform capability interface every plugin implements |
+| 19 | [System Laws](docs/19_SystemLaws.md) | The 19 immutable laws the whole system obeys (incl. restart safety) |
 | 20 | [Decision Engine](docs/20_DecisionEngine.md) | Deterministic decisions: retry/repair/escalate/split/defer/merge/abort |
 | 21 | [Implementation Roadmap](docs/21_ImplementationRoadmap.md) | Construction manual: subsystem order, milestones, rollback |
 | 22 | [Migration](docs/22_Migration.md) | First-phase onboarding of any existing project |

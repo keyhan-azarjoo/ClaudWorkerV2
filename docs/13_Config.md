@@ -57,9 +57,25 @@ component_map:                      # Jira component/label -> repo + plugin (opt
 
 workflow:
   max_concurrent: 3
-  max_attempts: 3
   merge: { strategy: no-ff, delete_branch: true }
   refresh_before_gates: true
+
+# Tunable thresholds — NEVER hardcoded in engine source. Every project may override any of these
+# without recompiling. These are the project defaults; the engine ships built-in fallbacks in
+# engine.yaml, and the dashboard may persist live overrides here (see Precedence).
+defaults:
+  abandoned_days: 30            # Jira analysis: issue idle > this ⇒ flag Abandoned ([22_Migration])
+  large_issue_threshold: 8      # Jira analysis / SPLIT: files-or-modules a plan may touch before "very large"
+  split_threshold: 5            # DecisionEngine SPLIT: modules/files above which decomposition is proposed ([20])
+  imgdiff_threshold: 0.02       # QA visual diff tolerance (0..1) ([06_QA]); per-plugin override allowed
+  lock_ttl:                     # per-scope lock TTL seconds ([15_LockManager])
+    issue: 3600
+    device: 1800
+    merge: 300
+  retry_limits:                 # bounded loops ([16], [20_DecisionEngine])
+    max_attempts: 3             # Coding↔Building↔QA loop cap
+    flaky_retries: 2            # deterministic flaky-suite retries (not counted as attempts)
+    merge_refresh: 3            # merge refresh/retry cycles before escalate
 
 usage_guard:
   provider: claude-cli
@@ -86,6 +102,11 @@ confluence:                         # optional deterministic publisher ([08])
 
 ## Configuration principles
 
+- **No hardcoded thresholds.** Every operational threshold (`abandoned_days`, `large_issue_threshold`,
+  `split_threshold`, `imgdiff_threshold`, `lock_ttl`, `retry_limits`, concurrency, usage percentages)
+  is a configurable project default under `defaults:`/`workflow:`/`usage_guard:`. The engine reads
+  them from config; it never bakes a threshold into source. A project overrides any of them without
+  recompiling.
 - **Names, not secrets.** Every credential is a reference to a vault entry. A leaked config file
   leaks nothing sensitive.
 - **Everything portable is here.** JQL, status names, AC location, labels, repo list, branch names,

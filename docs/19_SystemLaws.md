@@ -100,7 +100,7 @@ branch.
 
 - **Why:** minimizes divergence; makes each success immediately available to the next issue.
 - **Prevents:** merge backlogs; stale branches; "review later" rot.
-- **Trade-offs:** requires trustworthy automated gates ([06_QA](06_QA.md), [18](18_PlugInContract.md))
+- **Trade-offs:** requires trustworthy automated gates ([06_QA](06_QA.md), [18](18_PluginContract.md))
   and serialized merges (Law 11 corollary).
 - **Failure example:** ten verified branches wait to merge, drift from `development`, and each now
   needs re-verification — throughput collapses.
@@ -173,7 +173,7 @@ never by editing core.
 
 - **Why:** one engine serves every current and future project (MyOTGO is "just a config").
 - **Prevents:** MyOTGO-specific logic leaking into core; a fork per project.
-- **Trade-offs:** capabilities must fit the plugin contract ([18_PlugInContract](18_PlugInContract.md)).
+- **Trade-offs:** capabilities must fit the plugin contract ([18_PluginContract](18_PluginContract.md)).
 - **Failure example:** an `if project == "myotgo"` branch in the Orchestrator makes project #2 require
   a code change — the portability promise is broken.
 
@@ -198,12 +198,33 @@ performs a merge decision mechanically, or renders a gate result.
 - **Failure example:** letting a model "grant the lock" or "call the DRC passed" reintroduces exactly
   the non-determinism these laws exist to remove.
 
+## Law 19 — Restart safety is a core invariant
+**(P1/NFR-8)** The system must survive crashes and reboots. After any restart the engine **restores
+Assignments and Execution State, continues unfinished work, never restarts completed work, and never
+loses progress.**
+
+- **Why:** a local, long-running, unattended engine *will* be killed (crash, power loss, reboot,
+  laptop sleep); correctness must not depend on staying up.
+- **Prevents:** duplicated/redone work after a restart; lost in-flight progress; half-merges; orphaned
+  locks/worktrees; re-processing an already-closed issue.
+- **How it holds:** all durable state lives outside any process — Jira (work), Git (code + partial
+  commits), the Knowledge Brain, and the Execution State (`state.db`) on the SSD, fsynced. On startup
+  the reconciler ([15_LockManager](15_LockManager.md) §9) reaps stale locks, cleans orphans, rebuilds
+  Assignments from `state.db`, reconciles against Jira/Git, and resumes each at its last **stable**
+  state ([16_WorkerStateMachine](16_WorkerStateMachine.md)); completed work (merged + closed) is never
+  re-entered. Merges are atomic under the merge lock, so a crash never leaves a half-merge (I-3).
+- **Trade-offs:** every state transition must externalize its progress before it counts (workers stay
+  disposable, A-4); the engine does a bit more bookkeeping in exchange for crash-proof resume.
+- **Failure example:** an engine that held Assignment state only in memory would, after a reboot,
+  either redo a merged issue (wasting tokens, risking a double-merge) or lose a half-finished branch —
+  exactly what this law forbids.
+
 ---
 
 ## Compliance
 
 - Every other document in `docs/` must be consistent with these laws; a conflict is resolved in favor
-  of the law (or the law is changed deliberately, with the whole spec updated).
-- New plugins and features are reviewed against Laws 1–18 before merge.
+  of the law (or the law is changed deliberately via an ACP — [21_ImplementationRoadmap](21_ImplementationRoadmap.md)).
+- New plugins and features are reviewed against Laws 1–19 before merge.
 - The Architecture Review ([README](../README.md) → review) checks the spec for law violations,
   contradictions, and drift.

@@ -16,7 +16,7 @@ The construction manual. It defines the **order** subsystems are built, their **
 - **Vertical slice early.** As soon as the minimum spine exists, prove one real Jira issue end-to-end;
   then broaden.
 - **Every subsystem ships with tests + a CLI entry** (`cwv2 tool …` / `cwv2 <cmd>`) so it's
-  independently exercisable ([11_Plugins](11_Plugins.md), [18_PlugInContract](18_PlugInContract.md)).
+  independently exercisable ([11_Plugins](11_Plugins.md), [18_PluginContract](18_PluginContract.md)).
 - **Rollback = revert the subsystem's merge; the prior subsystem still works.** Because subsystems are
   layered and each is independently valid, reverting the top layer never breaks the ones beneath.
 
@@ -120,7 +120,7 @@ For each subsystem: **build** (what), **validation** (deterministic checks it mu
 
 ### S8 — Repair Loop + gates + first plugins
 - **Build:** Observe/Verify gates, plugin `Build/Verify/Repair` for `generic`, `flutter`, `dotnet`,
-  `web` ([17_RepairLoop](17_RepairLoop.md), [18_PlugInContract](18_PlugInContract.md)); human-like QA
+  `web` ([17_RepairLoop](17_RepairLoop.md), [18_PluginContract](18_PluginContract.md)); human-like QA
   rung for app/web.
 - **Validation:** induced-failure → repair → pass; deferral path when no device; visual diff vs golden.
 - **Acceptance (M2):** a Flutter and a .NET issue each complete with the repair loop, including one
@@ -186,9 +186,55 @@ For each subsystem: **build** (what), **validation** (deterministic checks it mu
 - **Go/no-go gates:** a milestone is only declared when its acceptance criteria pass; a failed
   acceptance blocks the next subsystem (no out-of-order build).
 
+## Implementation discipline (binding)
+
+These rules govern *how* each subsystem is built. They are part of the frozen spec.
+
+### Per-subsystem gates (all four must pass before the next subsystem)
+Every subsystem Sn must pass, in order, before S(n+1) begins:
+1. **Unit tests** — the subsystem's own logic.
+2. **Integration tests** — it works with the subsystems beneath it (real Jira/Git/SQLite/tools as
+   applicable).
+3. **Architecture compliance** — it obeys the frozen spec and the 19 System Laws
+   ([19_SystemLaws](19_SystemLaws.md)); deterministic where the spec says deterministic; no forbidden
+   dependency direction.
+4. **Performance validation** — meets the subsystem's stated performance/latency/zero-token
+   expectations (e.g. prompt assembly spends 0 tokens; lock acquire is O(1); a gate run completes
+   within its budget).
+
+A failed gate blocks progress. **Never skip roadmap order.**
+
+### No inventing architecture (ACP rule)
+No subsystem may invent architecture. If, during implementation, a subsystem discovers a missing or
+contradictory architectural requirement:
+
+1. **STOP** — do not code around it, do not guess.
+2. Write an **Architecture Change Proposal (ACP)** — see `ACP_TEMPLATE.md` — describing the gap, the
+   proposed change, affected docs/laws, and alternatives.
+3. **Do not continue** past the gap until the ACP is **approved by the owner** and the spec is updated
+   (version-bumped, below).
+
+Small, obvious implementation choices that don't change the architecture do **not** need an ACP; a
+change to any documented contract, law, schema, workflow, or invariant **does**.
+
+### Simplicity gate (before implementing any feature)
+Before implementing any feature, ask: **"Can this be made simpler?"**
+- If **yes** → simplify it first (Law 17).
+- If **no** → implement it.
+
+And always prefer **deterministic Go over AI reasoning** (Laws 5/6/18). If a step can be a program, it
+is a program.
+
+### Spec versioning
+The architecture is frozen at **v2.0.0** ([SPEC_VERSION.md](../SPEC_VERSION.md)). Implementation
+targets exactly this version. Any approved ACP bumps the spec version (semver: breaking→major,
+additive→minor, clarification→patch) and updates every affected document in the same change.
+
 ## What must never happen during construction
 
-- No subsystem built before its dependencies pass acceptance.
+- No subsystem built before its dependencies pass acceptance (all four gates).
 - No `claude -p` worker wired in before the deterministic core (S0–S5) is green.
 - No V1 file modified.
-- No architecture change without updating the frozen spec + this roadmap together.
+- No architecture change without an approved ACP + a spec version bump + updating this roadmap in the
+  same change.
+- No roadmap order skipped.

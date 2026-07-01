@@ -66,7 +66,7 @@ States: `HELD`, `WAIT`, `RELEASED`, `STALE`. A lock row in `state.db.locks`
 - **Hard** exclusive lock, `id = issue:<KEY>`. Acquired at CLAIM *before* any Jira transition, so two
   Assignments can never both claim `SCRUM-123` (I-1, [08_Jira](08_Jira.md)).
 - The engine also respects human ownership and the eligibility field: an issue assigned to a human,
-  labeled `owner-working`/`needs-human`, or whose **ClaudeWorker** field is not `Enable`
+  labeled `owner-working`/`needs-human`, or whose **Automation** field is not `Enabled`
   ([22_Migration](22_Migration.md)) is **not** lockable by the engine (NFR-11).
 - Held for the entire issue journey ([16_WorkerStateMachine](16_WorkerStateMachine.md)); released at
   Done / cancel / failure.
