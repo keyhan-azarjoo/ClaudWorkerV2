@@ -3,6 +3,13 @@
 The issue lifecycle state machine. This is the spine of the Orchestrator (deterministic Go). One
 Jira issue flows through it at a time per worker; many issues flow in parallel across workers.
 
+> **Two views, one process.** This doc describes the lifecycle in **Jira/issue** terms. Its
+> fine-grained **execution** counterpart — the worker-slot states (Idle, Waiting, Repair, Cancelled,
+> Failed) and every transition's entry/exit/timeout/recovery — is
+> [16_WorkerStateMachine](16_WorkerStateMachine.md), which includes a state-mapping table. The
+> Developer↔QA retry is the universal [17_RepairLoop](17_RepairLoop.md); locking is
+> [15_LockManager](15_LockManager.md).
+
 ## States
 
 ```

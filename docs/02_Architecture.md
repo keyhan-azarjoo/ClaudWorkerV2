@@ -42,15 +42,18 @@ The authoritative component map. Everything else in `docs/` refines a box drawn 
 - No AI. No tokens.
 
 ### 2. Orchestrator (the state machine)
-- Deterministic Go. Owns the **issue lifecycle** in [03_Workflow](03_Workflow.md). For each active
+- Deterministic Go. Owns the **issue lifecycle** in [03_Workflow](03_Workflow.md) (execution view:
+  the worker-slot state machine in [16_WorkerStateMachine](16_WorkerStateMachine.md)). For each active
   issue it decides the next stage and either (a) runs a deterministic step itself or (b) asks the
   Worker Runner to spawn the right worker with an assembled prompt.
-- Enforces the bounded Developer↔QA retry loop, deferral rules, and the merge gate.
+- Enforces the bounded Developer↔QA retry loop (the universal [17_RepairLoop](17_RepairLoop.md)),
+  deferral rules, and the merge gate.
 
 ### 3. Lock / Ownership manager
 - Deterministic Go. Grants exclusive ownership of an issue and of a working tree/branch. Guarantees
   P8 (no conflicts). Locks are persisted (DB) with TTL + heartbeat so a crashed worker's lock is
-  reaped (NFR-8). Details in [07_Git](07_Git.md) and [12_Database](12_Database.md).
+  reaped (NFR-8). Full design in [15_LockManager](15_LockManager.md); see also [07_Git](07_Git.md)
+  and [12_Database](12_Database.md).
 
 ### 4. Worker Runner
 - Deterministic Go. Spawns `claude -p` with: `--output-format json`, `--permission-mode acceptEdits`,

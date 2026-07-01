@@ -33,6 +33,10 @@ agent/<KEY>-<slug>   ← tiny, short-lived, one per issue, deleted right after m
 
 ## Ownership & locking
 
+> The full locking design — all scopes (device/issue/repo/module/folder/file/merge), fencing,
+> deadlock prevention, stealing, and crash/reboot recovery — is [15_LockManager](15_LockManager.md).
+> This section states only the two git-relevant scopes.
+
 Two lock scopes, both persisted in SQLite with TTL + heartbeat ([12_Database](12_Database.md)):
 
 1. **Issue lock** — one worker owns one Jira issue end-to-end. Prevents two workers touching the
