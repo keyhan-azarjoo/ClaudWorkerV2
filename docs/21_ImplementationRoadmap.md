@@ -20,26 +20,37 @@ The construction manual. It defines the **order** subsystems are built, their **
 - **Rollback = revert the subsystem's merge; the prior subsystem still works.** Because subsystems are
   layered and each is independently valid, reverting the top layer never breaks the ones beneath.
 
-## Dependency graph (build bottom-up)
+## Dependency graph (walking-skeleton first — amended by ACP-0001)
+
+> **Amended by [ACP-0001](acp/ACP-0001-assignment-engine-before-database.md) → spec v2.1.0.** The
+> Assignment Engine is built **before** the full database: persistence is an implementation detail
+> that must *emerge* from what execution actually needs, not be designed up front (Law 17). The
+> engine ships as a **walking skeleton** using **ports + minimal adapters**; later subsystems extend
+> those same interfaces to full spec (they are not rebuilt).
 
 ```
-S0 Foundations (repo, config loader, doctor, engine home, logging)
+S0 Foundations (repo, config loader, doctor, engine home, logging)                 ✅ done
       │
-S1 Deterministic Toolbelt core (git.*, jira.* read) + `cwv2 tool` CLI
+S1 Deterministic Toolbelt (git.*, jira.*) + CLI                                     ✅ done
       │
-S2 Databases (state.db + knowledge.db) + migrations
+S2 ASSIGNMENT ENGINE (walking skeleton) ── deterministic execution core            ◀ NEXT
+      │   ports: Locks (issue-lock only) · Decider (happy-path subset) ·
+      │          Workers (claude -p runner) · Store (minimum persistence) · git/jira
+      │   drives ONE real issue: claim → lifecycle → retries/progress →
+      │          resume-after-restart → hand off to QA/Merge (via ports)  ── M1 "first light"
       │
-S3 Knowledge Brain (indexers, dep-graph, prompt-assembly) ──┐
-      │                                                      │
-S4 Lock Manager V1 (issue/device/merge, fencing, reaper)    │
-      │                                                      │
-S5 Decision Engine (pure rules)                             │
-      │                                                      │
-S6 Worker Runner (spawn claude -p, schema-validate)  ◀──────┘ (needs S3 prompts)
+S3 Persistence (emergent state.db) ── formalize the Store from S2's real needs
+      │   (was old S2 "Databases"; 12_Database is the target, realized incrementally)
       │
-S7 Orchestrator + Assignment state machine (software path) ── first end-to-end issue
+S4 Knowledge Brain (indexers, dep-graph, small-prompt assembly) ── extends Workers input
       │
-S8 Repair Loop wiring + build/QA gates (generic + flutter/dotnet/web plugins)
+S5 Lock Manager full (add device + merge scopes, fencing, reaper) ── extends Locks
+      │
+S6 Decision Engine full (all 7 decisions + precedence + stuck detector) ── extends Decider
+      │
+S7 Worker Runner full (schema-validate, budgets, least-privilege tools) ── extends Workers
+      │
+S8 Repair Loop + build/QA gates (generic + flutter/dotnet/web plugins)
       │
 S9 Migration phase (repo+jira analysis, brain init, eligibility, report)
       │
@@ -52,7 +63,20 @@ S12 Hardware plugins (esp32/pcb/cad) with deferral
 S13 Second project onboarding (portability proof) + Future lock expansion (only if justified)
 ```
 
-Each Sn depends only on S0..S(n-1) (plus the noted branch). No forward dependencies.
+Each Sn depends only on S0..S(n-1). S2 depends on **interfaces**, so it can be built and fully tested
+(with fakes) before S3–S7 provide the production adapters. No forward dependencies.
+
+### Old → new numbering (ACP-0001)
+
+| Old | New | Note |
+|---|---|---|
+| S2 Databases | **S3** Persistence | now emergent, driven by S2 |
+| S3 Knowledge Brain | S4 | unchanged capability |
+| S4 Lock Manager V1 | S5 (+ minimal slice pulled into S2) | issue-lock in S2; device/merge later |
+| S5 Decision Engine | S6 (+ minimal slice pulled into S2) | happy-path subset in S2; full rules later |
+| S6 Worker Runner | S7 (+ minimal slice pulled into S2) | `claude -p` runner in S2; validation/budgets later |
+| S7 Orchestrator + Assignment state machine | **S2** Assignment Engine | moved earlier; the walking skeleton |
+| S8–S13 | unchanged | |
 
 ## Subsystem order, validation & acceptance
 
@@ -73,50 +97,76 @@ For each subsystem: **build** (what), **validation** (deterministic checks it mu
 - **Acceptance:** create a worktree/branch, commit, and read the SCRUM backlog **from the CLI**, no
   engine, no tokens.
 
-### S2 — Databases
-- **Build:** `state.db` + `knowledge.db` schemas ([12_Database](12_Database.md)), forward-only
-  migrations, WAL.
-- **Validation:** migration up/down tests; concurrent read (dashboard) + single write; integrity check.
-- **Acceptance:** both DBs create, migrate, and survive a simulated crash (fsync + reopen).
+### S2 — Assignment Engine (walking skeleton)  *(NEW — ACP-0001)*
+The heart of ClaudWorker V2: the deterministic execution core that carries one Jira issue through its
+lifecycle ([16_WorkerStateMachine](16_WorkerStateMachine.md)). **Entirely deterministic — no AI
+reasoning inside it** (Law 18); it coordinates the toolbelt and spawns disposable workers via a port.
+- **Build:** package `internal/assignment` (name TBD) with:
+  - `Assignment` type + lifecycle state machine (Idle→…→Done/Blocked/Cancelled/Failed).
+  - Responsibilities: claim a Jira issue, create the Assignment, own its lifecycle & state, track
+    retries & progress, coordinate the deterministic toolbelt (S1 git/jira), spawn disposable AI
+    workers, resume after restart, hand off to QA and to Merge.
+  - **Ports (interfaces):** `Locks` (issue-lock only for now), `Decider` (happy-path subset of the
+    seven decisions, [20_DecisionEngine](20_DecisionEngine.md)), `Workers` (spawn `claude -p`),
+    `Store` (**minimum** persistence), plus the existing `git`/`jira` toolbelt.
+  - **Minimal adapters:** a real issue-lock, a minimal deterministic `Decider`, a `claude -p` worker
+    runner, and a minimal `Store`. In-memory **fakes** for all ports drive deterministic tests.
+- **Database rule (ACP-0001):** persist **only** what the engine actually needs (the Assignment
+  record + issue-lock ownership — enough for Law 19 restart safety). Do **not** build the full
+  [12_Database](12_Database.md) schema here; it emerges in S3.
+- **Validation:** unit + integration tests (with fakes) for every transition, retry, and
+  resume-after-restart path; race detector; a crash/restart test proving unfinished work resumes and
+  completed work is never redone (Law 19).
+- **Acceptance (Milestone M1 — "first light"):** one real MyOTGO issue is driven Ready → (skeleton
+  lifecycle) → hand-off, resumable across a restart, with only the `Workers` port spending tokens
+  (fakes in tests → zero tokens in CI).
 
-### S3 — Knowledge Brain
+### S3 — Persistence (emergent `state.db`)  *(was S2 — Databases; reframed by ACP-0001)*
+- **Build:** formalize the S2 `Store` into `state.db` (and later `knowledge.db`) using only the tables
+  S2 proved it needs; forward-only migrations, WAL. [12_Database](12_Database.md) is the **target**,
+  realized incrementally — any table without a real consumer is not built (Law 17).
+- **Validation:** migration up/down tests; concurrent read (dashboard) + single write; integrity
+  check; the S2 engine passes unchanged against the real store (the `Store` interface is the seam).
+- **Acceptance:** the DB creates, migrates, and survives a simulated crash (fsync + reopen); S2's
+  resume-after-restart test passes against `state.db`, not just the minimal store.
+
+### S4 — Knowledge Brain  *(new number; ACP-0001)*
 - **Build:** file/symbol indexer, dependency graph, ADR/pattern/qa-map stores, **prompt-assembly**
-  (the six slices, P9) — [04_ProjectBrain](04_ProjectBrain.md).
+  (the six slices, P9) — [04_ProjectBrain](04_ProjectBrain.md). Replaces the S2 skeleton's minimal
+  prompt stub feeding the `Workers` port.
 - **Validation:** index a real repo; relevant-files selection returns a small, correct set; prompt
   assembly is deterministic and size-bounded.
 - **Acceptance:** given an issue key, the engine emits a small, correct prompt **using zero tokens** to
   assemble it.
 
-### S4 — Lock Manager V1
-- **Build:** issue/device/merge locks, fencing, heartbeat, reaper, reconciler
+### S5 — Lock Manager (full)  *(new number; ACP-0001 — extends the S2 issue-lock)*
+- **Build:** add device + merge scopes to the S2 issue-lock; fencing, heartbeat, reaper, reconciler
   ([15_LockManager](15_LockManager.md)).
 - **Validation:** property tests for L-1..L-6; concurrent-acquire race test; crash→steal→fence-reject
   test; reboot reconcile test.
 - **Acceptance:** two concurrent acquirers never both win; a stale lock is reclaimed and the zombie
   write is rejected.
 
-### S5 — Decision Engine
-- **Build:** pure `Decide(ctx)` with the 7 decisions + precedence + stuck detector
+### S6 — Decision Engine (full)  *(new number; ACP-0001 — extends the S2 happy-path Decider)*
+- **Build:** pure `Decide(ctx)` with all 7 decisions + precedence + stuck detector
   ([20_DecisionEngine](20_DecisionEngine.md)).
 - **Validation:** table-driven tests covering every rule + precedence; D-2 purity/totality property
   test.
 - **Acceptance:** every DecisionContext yields exactly one logged decision; **no tokens**.
 
-### S6 — Worker Runner
-- **Build:** spawn `claude -p` with per-stage allowed-tools, budgets, JSON schema validation, teardown
+### S7 — Worker Runner (full)  *(new number; ACP-0001 — extends the S2 `claude -p` runner)*
+- **Build:** per-stage allowed-tools, budgets, JSON schema validation, teardown
   ([05_Workers](05_Workers.md)).
 - **Validation:** one worker type (Manager) end-to-end on a real issue; invalid-JSON reprompt path;
   budget/timeout kill path.
 - **Acceptance:** a Manager worker returns a schema-valid plan for a real issue; disposability verified
   (kill mid-run → nothing lost).
 
-### S7 — Orchestrator + Assignment state machine (software path)
-- **Build:** the full Assignment lifecycle ([16_WorkerStateMachine](16_WorkerStateMachine.md)) wiring
-  S3–S6; Manager→Developer→Building→QA→Integrator→Done for a **generic** software repo.
-- **Validation:** drive a trivial real issue to a `--no-ff` merge on `development`; crash/resume at
-  each state.
-- **Acceptance (Milestone M1 — "first light"):** one real MyOTGO issue goes Ready → merged → Done,
-  branch deleted, Jira updated, with only Planning/Coding/QA spending tokens.
+> **Old S7 "Orchestrator + Assignment state machine" moved to S2 (ACP-0001).** The Assignment Engine
+> is now the walking skeleton built early (S2); S4–S7 above replace its minimal/faked adapters with
+> the production Knowledge Brain, Lock Manager, Decision Engine, and Worker Runner. The
+> "real merged issue, only Planning/Coding/QA spend tokens" outcome is reached when S7 completes and
+> folds into **M2**.
 
 ### S8 — Repair Loop + gates + first plugins
 - **Build:** Observe/Verify gates, plugin `Build/Verify/Repair` for `generic`, `flutter`, `dotnet`,
@@ -165,13 +215,14 @@ For each subsystem: **build** (what), **validation** (deterministic checks it mu
 
 ## Milestones
 
+Milestones re-anchored by ACP-0001 (walking-skeleton first):
+
 | ID | Name | Unlocks |
 |---|---|---|
-| **M0** | Deterministic core (S0–S5) | everything runs with **zero tokens** |
-| **M1** | First light (S7) | one real issue Ready→Done autonomously |
-| **M2** | Repair + app/web/.NET (S8) | routine software issues close, with deferral |
+| **M1** | First light — walking skeleton (**S2**) | one real issue driven through the Assignment lifecycle, resumable across restart; only the `Workers` port would spend tokens (fakes in tests → zero-token CI) |
+| **M2** | Production adapters + repair (S3–S8) | emergent `state.db`, real Brain/Lock/Decision/Worker adapters, repair loop + app/web/.NET plugins → routine software issues close (real merge, only Planning/Coding/QA spend tokens), with deferral |
 | **M3** | Migration (S9) | new projects onboarded safely, owner-approved |
-| **M4** | Ops + hardware + portability (S11–S13) | unattended, multi-domain, multi-project |
+| **M4** | Ops + hardware + portability (S10–S13) | unattended, multi-domain, multi-project |
 | **M5** | V2 replaces V1 | token/issue beats V1; common case autonomous |
 
 ## Rollback strategy
