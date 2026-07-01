@@ -9,10 +9,11 @@ workers are **disposable** and used **only for reasoning**. Every deterministic 
 Jira API, builds, screenshots, image diff, OCR, DRC/ERC, STL export, log parsing, scheduling …)
 is implemented in **Go** so no tokens are ever spent on work a program can do.
 
-> 🧊 **Architecture FROZEN at v2.0.0** (see [SPEC_VERSION.md](SPEC_VERSION.md)). The architecture in
+> 🧊 **Architecture FROZEN at v2.1.0** (see [SPEC_VERSION.md](SPEC_VERSION.md)). The architecture in
 > [`docs/`](docs/) is the source of truth. Implementation targets exactly this version and follows the
 > [Implementation Roadmap](docs/21_ImplementationRoadmap.md) strictly in order. Changes are made only
-> via an approved [Architecture Change Proposal](ACP_TEMPLATE.md).
+> via an approved [Architecture Change Proposal](ACP_TEMPLATE.md); see
+> [ACP-0001](docs/acp/ACP-0001-assignment-engine-before-database.md) (Assignment Engine before DB).
 
 ## Status
 
@@ -20,8 +21,8 @@ is implemented in **Go** so no tokens are ever spent on work a program can do.
 |---|---|
 | Repo created (`myotgo/ClaudWorkerV2`, private) | ✅ |
 | Architecture docs (`docs/00`–`docs/22` + review) | ✅ complete |
-| Architecture frozen | 🧊 **v2.0.0** (2026-07-01) |
-| Implementation | ▶️ **S0–S1 complete** (foundations + deterministic Git/Jira toolbelt + CLI) — S2 next |
+| Architecture frozen | 🧊 **v2.1.0** (2026-07-02; ACP-0001) |
+| Implementation | ▶️ **S0–S1 complete** (foundations + deterministic Git/Jira toolbelt + CLI) — next: **S2 Assignment Engine** (walking skeleton) |
 
 ### Build & run (S0–S1)
 
