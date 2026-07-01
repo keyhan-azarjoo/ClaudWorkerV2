@@ -7,7 +7,7 @@
 # Go build output
 /bin/
 /dist/
-cwv2
+/cwv2
 *.exe
 *.test
 *.out
