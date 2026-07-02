@@ -199,6 +199,29 @@ func TestFailAfterMaxAttempts(t *testing.T) {
 	}
 }
 
+// capRetry is a fake RetryDecider (a stand-in for the Policy Engine's RetryPolicy) that caps retries
+// at `max`, proving the engine ASKS the policy for the decision instead of using MaxAttempts (S6).
+type capRetry struct{ max int }
+
+func (c capRetry) ShouldRetry(attempts int) bool { return attempts < c.max }
+
+// TestRetryDelegatedToPolicy proves the engine defers the retry decision to an injected RetryDecider:
+// with MaxAttempts deliberately huge, the injected policy (cap 2) is what stops the retries.
+func TestRetryDelegatedToPolicy(t *testing.T) {
+	ctx := context.Background()
+	g, repo := setupGit(t)
+	w := &fakeWorker{results: []WorkerResult{{OK: false, Notes: "always fails"}}}
+	e := newEngine(t, g, repo, w, NewMemoryStore(), 999) // MaxAttempts is NOT what limits us
+	e.Retry = capRetry{max: 2}                           // the Policy Engine port decides
+	a, err := e.ClaimAndRun(ctx, "jql", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.State != StateFailed || a.Attempt != 2 {
+		t.Errorf("state=%s attempt=%d, want Failed/2 (policy cap), not MaxAttempts", a.State, a.Attempt)
+	}
+}
+
 // TestResumeRejectsNewerFormat proves recovery does not silently ignore a version mismatch: a record
 // written by a newer state format aborts Resume with an error.
 func TestResumeRejectsNewerFormat(t *testing.T) {
