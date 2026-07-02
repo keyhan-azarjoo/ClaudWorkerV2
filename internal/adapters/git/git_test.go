@@ -134,8 +134,13 @@ func TestMergeConflictAbortsCleanly(t *testing.T) {
 		t.Fatal(err)
 	}
 	// development changes the SAME file differently → conflict
+	// The Merger rebases onto origin/development before merging, so the conflicting change must be on
+	// ORIGIN (another agent pushed) — a local-only dev commit would be correctly rebased away.
 	_ = os.WriteFile(filepath.Join(repo, "base.txt"), []byte("dev change\n"), 0o644)
 	if _, err := g.Commit(ctx, repo, "dev edit", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Push(ctx, repo, "origin", "development"); err != nil {
 		t.Fatal(err)
 	}
 	merged, err := NewMerger(a).Merge(ctx, "SCRUM-1")

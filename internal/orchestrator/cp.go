@@ -135,7 +135,7 @@ func (o *Orchestrator) RegisterControlPlane() {
 			}
 		}
 		go func() {
-			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account); err != nil {
+			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account, ""); err != nil {
 				o.log().Error("orchestrator", "op", "manual-run", "issue", req.Issue, "error", err.Error())
 				o.emit("AssignmentFailed", "orchestrator", map[string]any{"issue": req.Issue, "error": err.Error()})
 			}
@@ -149,10 +149,12 @@ func (o *Orchestrator) RegisterControlPlane() {
 		var req struct {
 			Issue   string `json:"issue"`
 			Account string `json:"account"`
+			Message string `json:"message"` // optional operator guidance sent to the agent on resume
 		}
 		_ = json.Unmarshal(body, &req)
 		req.Issue = strings.TrimSpace(req.Issue)
 		req.Account = strings.TrimSpace(req.Account)
+		req.Message = strings.TrimSpace(req.Message)
 		if req.Issue == "" {
 			return nil, fmt.Errorf("issue key required")
 		}
@@ -171,8 +173,11 @@ func (o *Orchestrator) RegisterControlPlane() {
 				_ = o.Store.Save(a)
 			}
 		}
+		if req.Message != "" {
+			o.AppendTaskLog(req.Issue, "🧑 operator: "+req.Message)
+		}
 		go func() {
-			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account); err != nil {
+			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account, req.Message); err != nil {
 				o.log().Error("orchestrator", "op", "continue", "issue", req.Issue, "error", err.Error())
 				o.emit("AssignmentFailed", "orchestrator", map[string]any{"issue": req.Issue, "error": err.Error()})
 			}

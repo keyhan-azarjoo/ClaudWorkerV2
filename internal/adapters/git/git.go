@@ -168,22 +168,38 @@ func NewMerger(a *Adapter) *Merger { return &Merger{a: a} }
 // Merge fetches, merges the assignment branch --no-ff into the integration branch, and best-effort
 // pushes. Returns merged=false on conflict (already aborted).
 func (m *Merger) Merge(ctx context.Context, issue string) (bool, error) {
-	// Fast-forward the integration branch to origin FIRST so our merge sits on top of the latest and
-	// the push is a fast-forward (otherwise the remote moves ahead and the push is REJECTED, so the
-	// merge never reaches GitHub). Best-effort: if it can't ff (diverged), we still merge locally.
-	if err := m.a.g.Pull(ctx, m.a.repo, m.a.remote, m.a.devBranch); err != nil {
-		_ = m.a.g.Fetch(ctx, m.a.repo)
-	}
+	// Robust against CONCURRENT pushes (other ClaudWorker tasks AND external agents on the same repo):
+	// each attempt rebases the integration branch onto the LATEST origin, merges the assignment branch,
+	// and pushes. If the push is rejected because the remote moved again mid-merge, we retry. A real
+	// merge CONFLICT (overlapping changes) is not retried — it aborts cleanly and reports not-merged.
 	branch := m.a.BranchFor(issue)
-	mr, err := m.a.g.Merge(ctx, m.a.repo, branch, "Merge "+branch+" ("+issue+")")
-	if err != nil {
-		return false, err
+	origin := m.a.remote + "/" + m.a.devBranch
+	var lastErr error
+	for attempt := 0; attempt < 4; attempt++ {
+		if err := m.a.g.Fetch(ctx, m.a.repo); err != nil {
+			lastErr = err
+			continue
+		}
+		// Clean base = the latest origin (discards stale/diverged local dev so the push fast-forwards).
+		if err := m.a.g.Reset(ctx, m.a.repo, origin); err != nil {
+			lastErr = err
+			continue
+		}
+		mr, err := m.a.g.Merge(ctx, m.a.repo, branch, "Merge "+branch+" ("+issue+")")
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if !mr.Merged {
+			return false, nil // real conflict — aborted, tree clean (needs rebase/human)
+		}
+		if err := m.a.g.Push(ctx, m.a.repo, m.a.remote, m.a.devBranch); err != nil {
+			lastErr = err // remote moved between fetch and push → retry against the newer origin
+			continue
+		}
+		return true, nil // merged + pushed cleanly
 	}
-	if !mr.Merged {
-		return false, nil // conflict — aborted, tree clean
-	}
-	_ = m.a.g.Push(ctx, m.a.repo, m.a.remote, m.a.devBranch) // best-effort; local merge already durable
-	return true, nil
+	return false, lastErr
 }
 
 // Compile-time port conformance.

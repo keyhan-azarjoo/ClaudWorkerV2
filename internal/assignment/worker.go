@@ -18,6 +18,7 @@ type WorkerInput struct {
 	AcceptanceCriteria string
 	RelevantFiles      []File
 	KnowledgeContext   string
+	OperatorNote       string // optional operator guidance passed on a manual Continue (what to do next)
 }
 
 // File is a path + content pair used both for relevant-file context and for proposed writes.

@@ -50,6 +50,7 @@ type Jira interface {
 // the runtime still never CHOOSES the account.
 type DevInput struct {
 	Issue, Summary, AcceptanceCriteria, KnowledgeContext, Runtime, Account string
+	OperatorNote                                                           string // human guidance from a manual Continue
 }
 
 // DevResult is a worker outcome (files changed). Real impl wraps runtime.Runner; tests fake it.
@@ -368,7 +369,7 @@ func (o *Orchestrator) Recover(ctx context.Context) error {
 			continue
 		}
 		o.emit("AssignmentResumed", "orchestrator", map[string]any{"issue": a.IssueKey, "state": string(a.State)})
-		_ = o.runAssignment(ctx, a, iss, "")
+		_ = o.runAssignment(ctx, a, iss, "", "")
 	}
 	return nil
 }
@@ -387,7 +388,7 @@ func (o *Orchestrator) ProcessOnce(ctx context.Context) (bool, error) {
 	if err != nil || !ok {
 		return false, err
 	}
-	return true, o.runAssignment(ctx, a, iss, "")
+	return true, o.runAssignment(ctx, a, iss, "", "")
 }
 
 // claimNext finds the first eligible, unclaimed issue and claims it: persist the Assignment, acquire
@@ -429,7 +430,7 @@ func (o *Orchestrator) claimNext(ctx context.Context) (*assignment.Assignment, I
 // RunIssue claims and runs ONE specific issue on demand (operator "run this ticket"), bypassing the
 // ready-label queue and the idle gate. It still respects the budget gate and the issue lock (never
 // redoes terminal work). Intended to be called in a goroutine — it runs the full pipeline.
-func (o *Orchestrator) RunIssue(ctx context.Context, key, account string) (bool, error) {
+func (o *Orchestrator) RunIssue(ctx context.Context, key, account, operatorNote string) (bool, error) {
 	if key == "" {
 		return false, fmt.Errorf("issue key required")
 	}
@@ -448,7 +449,7 @@ func (o *Orchestrator) RunIssue(ctx context.Context, key, account string) (bool,
 		if err != nil {
 			return false, err
 		}
-		return true, o.runAssignment(ctx, a, iss, account)
+		return true, o.runAssignment(ctx, a, iss, account, operatorNote)
 	}
 	// Fresh claim for this specific issue.
 	iss, err := o.Jira.Get(ctx, key)
@@ -471,7 +472,7 @@ func (o *Orchestrator) RunIssue(ctx context.Context, key, account string) (bool,
 	o.mu.Unlock()
 	o.emit(controlplane.EventAssignmentCreated, "assignment", map[string]any{"issue": key, "state": string(a.State)})
 	o.recordAction(key, "claimed", "done", "")
-	return true, o.runAssignment(ctx, a, iss, account)
+	return true, o.runAssignment(ctx, a, iss, account, operatorNote)
 }
 
 // keywords derives deterministic relevance terms from the task for the Knowledge Brain.
@@ -499,9 +500,9 @@ func pick(cond bool, a, b string) string {
 
 // buildImprovement wires S8 (verify) + S9 (improve) + S6 (policy) into the improvement loop for one
 // issue, reusing each subsystem — the Orchestrator adds no loop logic of its own.
-func (o *Orchestrator) buildImprovement(iss Issue, kctx, runtimeName, account string) *improvement.Engine {
+func (o *Orchestrator) buildImprovement(iss Issue, kctx, runtimeName, account, operatorNote string) *improvement.Engine {
 	verifier := &impVerifier{o: o, issue: iss.Key}
-	improver := &impImprover{o: o, iss: iss, kctx: kctx, runtime: runtimeName, account: account}
+	improver := &impImprover{o: o, iss: iss, kctx: kctx, runtime: runtimeName, account: account, operatorNote: operatorNote}
 	dec := improvement.NewPolicyDecider(o.Policy)
 	eng := improvement.New(verifier, improver, dec, improvement.WithClock(o.now))
 	eng.MaxIterations = o.Cfg.MaxImprovementIters

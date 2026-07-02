@@ -101,6 +101,13 @@ func BuildPrompt(in assignment.WorkerInput) string {
 		b.WriteString("\n")
 	}
 
+	// Operator guidance from a manual Continue (highest-priority instruction from the human).
+	if strings.TrimSpace(in.OperatorNote) != "" {
+		b.WriteString("\n# Operator instruction (IMPORTANT — from the human operator, follow this)\n")
+		b.WriteString(strings.TrimSpace(in.OperatorNote))
+		b.WriteString("\n")
+	}
+
 	if len(in.RelevantFiles) > 0 {
 		b.WriteString("\n# Relevant Files\n")
 		for _, f := range in.RelevantFiles {
