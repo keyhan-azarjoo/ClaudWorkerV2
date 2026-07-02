@@ -1,7 +1,7 @@
 // jira.js — the connected Jira board. Shows the READY queue (issues the engine will claim, labelled
 // `ready`) and the full open BACKLOG (all To Do / in-progress issues) so the operator sees real work.
 import { api } from "api";
-import { el, card, sectionHead, badge, table, emptyState } from "ui";
+import { el, card, sectionHead, badge, table, emptyState, button } from "ui";
 
 const autoTone = (a) => ({ Enabled: "ok", Disabled: "danger", "Manual Only": "warn", "Needs Review": "info" }[a] || "");
 const prioTone = (p) => ({ Highest: "danger", High: "warn", Medium: "info", Low: "", Lowest: "" }[p] || "");
@@ -49,6 +49,26 @@ export default {
                 { key: "status", label: "Status", render: (r) => badge(r.status) },
                 { key: "priority", label: "Priority", render: (r) => badge(r.priority || "—", prioTone(r.priority)) },
                 { key: "ready", label: "Ready", render: (r) => (r.ready ? badge("ready", "ok") : "—") },
+                {
+                  key: "run",
+                  label: "",
+                  render: (r) =>
+                    button("Run", {
+                      tone: "primary",
+                      onClick: async (e) => {
+                        const b = e.target;
+                        b.textContent = "Started";
+                        b.disabled = true;
+                        try {
+                          await api.command("orchestrator.run", { issue: r.key });
+                        } catch (err) {
+                          b.textContent = "Run";
+                          b.disabled = false;
+                          backlogBody.prepend(el("div", { class: "notice danger" }, `Failed to start ${r.key}: ` + (err && err.message ? err.message : err)));
+                        }
+                      },
+                    }),
+                },
               ],
               rows
             )

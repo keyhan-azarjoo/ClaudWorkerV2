@@ -9,6 +9,7 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -326,6 +327,53 @@ func (o *Orchestrator) claimNext(ctx context.Context) (*assignment.Assignment, I
 		return a, iss, true, nil
 	}
 	return nil, Issue{}, false, nil
+}
+
+// RunIssue claims and runs ONE specific issue on demand (operator "run this ticket"), bypassing the
+// ready-label queue and the idle gate. It still respects the budget gate and the issue lock (never
+// redoes terminal work). Intended to be called in a goroutine — it runs the full pipeline.
+func (o *Orchestrator) RunIssue(ctx context.Context, key string) (bool, error) {
+	if key == "" {
+		return false, fmt.Errorf("issue key required")
+	}
+	bd := o.Policy.Budget.Decide(policy.BudgetInput{UsagePct: 0, UsageKnown: true})
+	if !bd.Allow {
+		return false, fmt.Errorf("budget gate: %s", bd.Reason)
+	}
+	// Already tracked? Resume if unfinished; refuse to redo terminal work (Law 19).
+	if a, exists, err := o.Store.Load(key); err != nil {
+		return false, err
+	} else if exists {
+		if a.State.Terminal() {
+			return false, fmt.Errorf("issue %s is already %s", key, a.State)
+		}
+		iss, err := o.Jira.Get(ctx, key)
+		if err != nil {
+			return false, err
+		}
+		return true, o.runAssignment(ctx, a, iss)
+	}
+	// Fresh claim for this specific issue.
+	iss, err := o.Jira.Get(ctx, key)
+	if err != nil {
+		return false, err
+	}
+	a := &assignment.Assignment{IssueKey: key, State: assignment.StateClaimed}
+	if err := o.Store.Save(a); err != nil {
+		return false, err
+	}
+	if l, granted, _ := o.Leases.Acquire(lease.Request{Kind: lease.KindIssue, Resource: key, Owner: key, Reason: "manual-run", Renewable: true}); granted {
+		o.emit(controlplane.EventLeaseGranted, "lease", l)
+	}
+	if o.Cfg.InProgressStatus != "" {
+		_ = o.Jira.Transition(ctx, key, o.Cfg.InProgressStatus)
+	}
+	_ = o.Jira.Comment(ctx, key, "ClaudWorker claimed this issue (manual run)")
+	o.mu.Lock()
+	o.lastIssue = key
+	o.mu.Unlock()
+	o.emit(controlplane.EventAssignmentCreated, "assignment", map[string]any{"issue": key, "state": string(a.State)})
+	return true, o.runAssignment(ctx, a, iss)
 }
 
 // keywords derives deterministic relevance terms from the task for the Knowledge Brain.

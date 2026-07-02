@@ -56,6 +56,7 @@ const (
 	Reserved  AvailabilityValue = "reserved"
 	Cooldown  AvailabilityValue = "cooldown"
 	Offline   AvailabilityValue = "offline"
+	Paused    AvailabilityValue = "paused" // manually paused by the operator (never auto-selected)
 )
 
 // AvailabilityValue is the type of the derived availability constants.
@@ -83,6 +84,7 @@ type Resource struct {
 	Metrics       Metrics           `json:"metrics"`
 
 	reservedBy string // transient reservation holder; NOT persisted, NOT a durable lock (S7B)
+	paused     bool   // operator pause (manual); paused resources are never selected for work
 }
 
 func (r *Resource) clone() *Resource {
