@@ -87,7 +87,7 @@ func TestWorkspaceLifecycle(t *testing.T) {
 
 func TestDeveloperCommitsRealChange(t *testing.T) {
 	a, _, _ := newAdapter(t)
-	dev := NewDeveloper(a, &sim.Developer{})
+	dev := NewDeveloper(a, FromDeveloper(&sim.Developer{}))
 	res, err := dev.Develop(context.Background(), orchestrator.DevInput{Issue: "SCRUM-1", Summary: "add file"})
 	if err != nil || !res.OK {
 		t.Fatalf("develop = %+v err=%v", res, err)
@@ -106,7 +106,7 @@ func TestDeveloperCommitsRealChange(t *testing.T) {
 func TestMergeSuccess(t *testing.T) {
 	a, g, repo := newAdapter(t)
 	ctx := context.Background()
-	dev := NewDeveloper(a, &sim.Developer{})
+	dev := NewDeveloper(a, FromDeveloper(&sim.Developer{}))
 	if _, err := dev.Develop(ctx, orchestrator.DevInput{Issue: "SCRUM-1", Summary: "add file"}); err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestProductionFlowRealGit(t *testing.T) {
 		Store:     store,
 		CP:        controlplane.NewServer(controlplane.NewBus()),
 		Jira:      jiraS,
-		Developer: NewDeveloper(a, &sim.Developer{}), // REAL Git workspace + commit
+		Developer: NewDeveloper(a, FromDeveloper(&sim.Developer{})), // REAL Git workspace + commit
 		Verifier:  sim.NewVerifier(),
 		Merger:    NewMerger(a), // REAL --no-ff merge
 		Cleaner:   a,            // REAL cleanup

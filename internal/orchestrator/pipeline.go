@@ -36,13 +36,13 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 	// --- Run Worker (initial develop) ---
 	a.State = assignment.StateDeveloping
 	_ = o.Store.Save(a)
-	dev, err := o.Developer.Develop(ctx, DevInput{Issue: iss.Key, Summary: iss.Summary, AcceptanceCriteria: iss.AcceptanceCriteria, KnowledgeContext: kctx, Runtime: runtimeName})
+	dev, err := o.Developer.Develop(ctx, DevInput{Issue: iss.Key, Summary: iss.Summary, AcceptanceCriteria: iss.AcceptanceCriteria, KnowledgeContext: kctx, Runtime: runtimeName, Account: resID})
 	o.emit(controlplane.EventRuntimeFinished, "runtime", map[string]any{"issue": iss.Key, "ok": err == nil && dev.OK, "changed": len(dev.ChangedFiles)})
 
 	// --- Verification + Improvement loop (S8 + S9), stop decided by the Policy Engine (S6) ---
 	a.State = assignment.StateQA
 	_ = o.Store.Save(a)
-	imp := o.buildImprovement(iss, kctx, runtimeName)
+	imp := o.buildImprovement(iss, kctx, runtimeName, resID)
 	res, _ := imp.Run(ctx, improvement.ImprovementInput{Assignment: iss.Key, KnowledgeContext: kctx})
 	o.emit(controlplane.EventPolicyDecision, "policy", map[string]any{"policy": "improvement", "decision": string(res.Status), "reason": "improvement loop terminal", "iterations": res.Progress.Iterations})
 
@@ -185,10 +185,11 @@ type impImprover struct {
 	iss     Issue
 	kctx    string
 	runtime string
+	account string
 }
 
 func (im *impImprover) Improve(ctx context.Context, in improvement.ImprovementInput) (improvement.Change, error) {
-	dev, err := im.o.Developer.Develop(ctx, DevInput{Issue: im.iss.Key, Summary: im.iss.Summary, AcceptanceCriteria: im.iss.AcceptanceCriteria, KnowledgeContext: im.kctx, Runtime: im.runtime})
+	dev, err := im.o.Developer.Develop(ctx, DevInput{Issue: im.iss.Key, Summary: im.iss.Summary, AcceptanceCriteria: im.iss.AcceptanceCriteria, KnowledgeContext: im.kctx, Runtime: im.runtime, Account: im.account})
 	if err != nil {
 		return improvement.Change{}, err
 	}

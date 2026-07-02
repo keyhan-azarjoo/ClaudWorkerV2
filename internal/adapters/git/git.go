@@ -98,26 +98,45 @@ func (a *Adapter) Status(ctx context.Context) (Status, error) {
 
 // --- Developer: real Git workspace + commit around an inner (reasoning) worker ---
 
-// Developer implements orchestrator.Developer. It prepares the worktree, runs the inner worker (still
-// simulated until Phase 2.3 — the Worker Runtime), materialises the worker's declared changed files if
-// they don't exist yet, and commits. The Git side is fully real; only the reasoning is simulated.
+// WorktreeWorker runs the reasoning worker INSIDE a prepared worktree. It is the seam between the Git
+// workspace (this package) and the Worker Runtime (Phase 2.3): the real runtime edits files in the
+// given worktree; the simulated worker ignores it.
+type WorktreeWorker interface {
+	Develop(ctx context.Context, worktree string, in orchestrator.DevInput) (orchestrator.DevResult, error)
+}
+
+// FromDeveloper adapts a plain orchestrator.Developer (e.g. the sim worker) into a WorktreeWorker that
+// ignores the worktree — used for simulation-of-Git and tests.
+func FromDeveloper(d orchestrator.Developer) WorktreeWorker { return worktreeFromDeveloper{d} }
+
+type worktreeFromDeveloper struct{ d orchestrator.Developer }
+
+func (w worktreeFromDeveloper) Develop(ctx context.Context, _ string, in orchestrator.DevInput) (orchestrator.DevResult, error) {
+	return w.d.Develop(ctx, in)
+}
+
+// Developer implements orchestrator.Developer. It prepares the worktree, runs the worker IN that
+// worktree, materialises any declared changed files that the worker did not physically write, and
+// commits. The Git side is fully real; the reasoning is the Worker Runtime (real Claude in live mode,
+// sim otherwise).
 type Developer struct {
-	a     *Adapter
-	inner orchestrator.Developer
+	a      *Adapter
+	worker WorktreeWorker
 }
 
-// NewDeveloper composes the Git workspace with an inner worker.
-func NewDeveloper(a *Adapter, inner orchestrator.Developer) *Developer {
-	return &Developer{a: a, inner: inner}
+// NewDeveloper composes the Git workspace with a worktree-aware worker.
+func NewDeveloper(a *Adapter, worker WorktreeWorker) *Developer {
+	return &Developer{a: a, worker: worker}
 }
 
-// Develop prepares the worktree, runs the worker, and commits its output into the assignment branch.
+// Develop prepares the worktree, runs the worker in it, and commits its output into the assignment
+// branch.
 func (d *Developer) Develop(ctx context.Context, in orchestrator.DevInput) (orchestrator.DevResult, error) {
 	wt, err := d.a.EnsureWorkspace(ctx, in.Issue)
 	if err != nil {
 		return orchestrator.DevResult{}, err
 	}
-	res, err := d.inner.Develop(ctx, in)
+	res, err := d.worker.Develop(ctx, wt, in)
 	if err != nil {
 		return res, err
 	}
