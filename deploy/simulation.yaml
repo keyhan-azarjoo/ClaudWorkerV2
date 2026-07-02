@@ -1,0 +1,19 @@
+# ClaudWorker V2 — local Simulation Mode config for reviewing the Operations Console.
+# No credentials, no Claude/Jira/GitHub/hardware. Fields are present to satisfy validation; the
+# simulation adapters ignore them.
+project: demo
+engine_home: /tmp/cwv2-sim
+github:
+  user: keyhan-azarjoo
+  commit_identity: { name: keyhanazarjoo, email: keyhanazarjoo@gmail.com }
+repos:
+  - name: demo
+    url: https://example.com/demo.git
+    dev_branch: development
+    plugin: generic
+jira:
+  base_url: https://example.atlassian.net
+  project_key: DEMO
+  work_jql: 'project = DEMO AND status = "To Do"'
+usage_guard: { pause_pct: 95, resume_pct: 80, fail_open: false }
+dashboard: { token: "" }   # empty = no login (loopback only; safe for local review)

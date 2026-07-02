@@ -11,18 +11,19 @@ github:
     name: keyhanazarjoo
     email: keyhanazarjoo@gmail.com
 
-# Repositories the platform works on. Pick ONE to pilot first (recommend the backend or a small repo).
+# Repositories the platform works on. Pilot ONE first (recommend the backend). Real remotes below.
+# Per-repo build/verify commands are in VERIFICATION_PLAN.md; pass them to serve via --build-cmd etc.
 repos:
-  - name: backend
-    url: https://github.com/myotgo/DotNet-IoT-MainWebApi.git
+  - name: backend            # PILOT — build: dotnet build ; verify: dotnet test ; api: https://api.myotgo.com/health
+    url: https://github.com/keyhan-azarjoo/DotNet-IoT-MainWebApi.git
     dev_branch: development
     plugin: generic
-  # - name: mobile-app
-  #   url: https://github.com/myotgo/Flutter-IoT-MobileApp.git
+  # - name: mobile-app       # build: flutter build apk --debug ; verify: flutter analyze && flutter test
+  #   url: https://github.com/keyhan-azarjoo/Flutter-IoT-MobileApp.git
   #   dev_branch: development
   #   plugin: generic
-  # - name: website
-  #   url: https://github.com/myotgo/NextJs-Myotgo-Website.git
+  # - name: website          # build: npm ci && npm run build ; verify: npm run lint && npm test ; web: https://myotgo.com
+  #   url: https://github.com/keyhan-azarjoo/NextJs-Myotgo-Website.git
   #   dev_branch: development
   #   plugin: generic
 
