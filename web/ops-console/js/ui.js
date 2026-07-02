@@ -97,7 +97,9 @@ export function table(columns, rows) {
       })
     )
   );
-  return el("table", { class: "tbl" }, thead, el("tbody", {}, ...trs));
+  // Wrap in a horizontal-scroll container so wide tables scroll inside the card on mobile instead of
+  // scrolling the whole page.
+  return el("div", { class: "tbl-wrap" }, el("table", { class: "tbl" }, thead, el("tbody", {}, ...trs)));
 }
 
 export function emptyState(big, hint) {

@@ -169,7 +169,7 @@ async function build() {
   // Topbar
   const title = el("h1", {}, "Dashboard");
   const connDot = statusDot("", true);
-  const connText = el("span", {}, "connecting…");
+  const connText = el("span", { class: "conn-text" }, "connecting…");
   const conn = el("span", { class: "conn" }, connDot, connText);
   const menuBtn = el("button", { class: "btn ghost menu-toggle", onClick: () => app.classList.toggle("nav-open") }, "☰");
 
