@@ -138,6 +138,13 @@ func (o *Orchestrator) finish(ctx context.Context, a *assignment.Assignment, iss
 	if released, _ := o.Leases.Release(lease.KindIssue, iss.Key, iss.Key); released {
 		o.emit(controlplane.EventLeaseExpired, "lease", map[string]any{"kind": "issue", "resource": iss.Key, "owner": iss.Key})
 	}
+	// Clean the Git workspace on ANY terminal state (done or failed) — safety: no leaked worktrees or
+	// branches. Optional/nil-safe (simulation leaves Cleaner unset).
+	if o.Cleaner != nil {
+		if err := o.Cleaner.Cleanup(ctx, iss.Key); err == nil {
+			o.emit("WorkspaceCleaned", "git", map[string]any{"issue": iss.Key, "state": string(state)})
+		}
+	}
 	o.count("processed")
 	o.count(string(state))
 	o.emit(controlplane.EventAssignmentCompleted, "assignment", map[string]any{"issue": iss.Key, "state": string(state), "reason": reason})
