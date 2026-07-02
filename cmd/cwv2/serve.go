@@ -171,7 +171,7 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 	if live {
 		// Real Resource Discovery (Phase B #1): probe accounts, local providers and devices via the
 		// Resource Manager (no duplicated logic). Best-effort — missing tools/endpoints yield nothing.
-		discoverLiveFleet(res)
+		discoverLiveFleet(res, cfg.Accounts)
 	}
 	// Ensure at least one runtime account so the loop always runs (fallback / simulation default).
 	if len(res.List(resource.Filter{Kind: resource.KindClaudeAccount})) == 0 {
@@ -266,17 +266,43 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 }
 
 // discoverLiveFleet runs real discovery (best-effort) into the Resource Manager: local model
-// providers, Android/iOS-sim/ESP32 devices, and Claude accounts from their config dirs.
-func discoverLiveFleet(res *resource.Manager) {
+// providers, Android/iOS-sim/ESP32 devices, and Claude accounts. When the config lists accounts they
+// are used verbatim (only those known accounts); otherwise it falls back to folder auto-discovery.
+func discoverLiveFleet(res *resource.Manager, accts []config.Account) {
 	comp := discovery.Composite{
 		discovery.Provider{ID: "ollama", BaseURL: "http://127.0.0.1:11434", Ollama: true},
 		discovery.Provider{ID: "lmstudio", BaseURL: "http://127.0.0.1:1234"},
 		discovery.Adb{},
 		discovery.Simctl{},
 		discovery.Serial{},
-		discovery.Accounts{Kind: resource.KindClaudeAccount, Dirs: defaultClaudeDirs()},
+		discovery.Accounts{Kind: resource.KindClaudeAccount, Dirs: accountDirs(accts)},
 	}
 	_ = res.Discover(comp) // best-effort; never fatal
+}
+
+// accountDirs maps configured accounts (Claude engine only — V2 runs Claude) to name→config-dir. If
+// no accounts are configured it falls back to auto-discovering ~/.cw-accounts.
+func accountDirs(accts []config.Account) map[string]string {
+	if len(accts) == 0 {
+		return defaultClaudeDirs()
+	}
+	out := map[string]string{}
+	home, _ := os.UserHomeDir()
+	for _, a := range accts {
+		if a.Engine != "" && a.Engine != "claude" {
+			continue // V2 executes Claude only; skip codex/other so they can't be selected and fail
+		}
+		dir := a.ConfigDir
+		if strings.HasPrefix(dir, "~/") && home != "" {
+			dir = filepath.Join(home, dir[2:])
+		}
+		name := a.Name
+		if name == "" {
+			name = filepath.Base(dir)
+		}
+		out[name] = dir
+	}
+	return out
 }
 
 // defaultClaudeDirs finds Claude account config dirs under the conventional locations.
