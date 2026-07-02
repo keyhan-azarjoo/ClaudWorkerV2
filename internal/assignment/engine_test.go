@@ -16,13 +16,10 @@ import (
 	"github.com/myotgo/ClaudWorkerV2/internal/jira"
 )
 
-// ---- fakes ----
-
-// fakeWorker returns a scripted sequence of results (one per call); the last is reused after exhaust.
+// fakeWorker returns a scripted sequence of results (one per call); the last repeats after exhaust.
 type fakeWorker struct {
 	mu      sync.Mutex
 	results []WorkerResult
-	err     error
 	calls   int
 }
 
@@ -30,9 +27,6 @@ func (f *fakeWorker) Run(ctx context.Context, in WorkerInput) (WorkerResult, err
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
-	if f.err != nil {
-		return WorkerResult{}, f.err
-	}
 	i := f.calls - 1
 	if i >= len(f.results) {
 		i = len(f.results) - 1
@@ -40,8 +34,6 @@ func (f *fakeWorker) Run(ctx context.Context, in WorkerInput) (WorkerResult, err
 	return f.results[i], nil
 }
 
-// mockJira serves the endpoints the engine uses: search, transitions (GET+POST), comment (POST),
-// and GET issue (for acceptance criteria).
 func mockJira(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -78,7 +70,6 @@ func mockJira(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// setupGit builds a work repo on "development" with one commit and a bare origin to push/merge into.
 func setupGit(t *testing.T) (*git.Git, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -107,35 +98,29 @@ func setupGit(t *testing.T) (*git.Git, string) {
 	return g, work
 }
 
-func newEngine(t *testing.T, g *git.Git, repo string, w Worker, maxAttempts int) (*Engine, *Store) {
+func newEngine(t *testing.T, g *git.Git, repo string, w Worker, store Store, maxAttempts int) *Engine {
 	t.Helper()
 	srv := mockJira(t)
-	jc := jira.New(srv.URL, "me@x.com", "tok")
-	store, err := NewStore(filepath.Join(t.TempDir(), "assignments"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	e := &Engine{
-		Owner:       "engine-test",
+	return &Engine{
 		RepoPath:    repo,
 		DevBranch:   "development",
 		WorktreeDir: filepath.Join(t.TempDir(), "wt"),
 		MaxAttempts: maxAttempts,
 		InProgress:  []string{"In Progress"},
 		Done:        []string{"Done"},
-		Jira:        jc,
+		Jira:        jira.New(srv.URL, "me@x.com", "tok"),
 		Git:         g,
 		Worker:      w,
 		Store:       store,
 	}
-	return e, store
 }
 
 func TestFullLifecycleToDone(t *testing.T) {
 	ctx := context.Background()
 	g, repo := setupGit(t)
 	w := &fakeWorker{results: []WorkerResult{{OK: true, Summary: "add hello", Files: []File{{Path: "hello.txt", Content: "hello\n"}}}}}
-	e, store := newEngine(t, g, repo, w, 3)
+	store := NewMemoryStore()
+	e := newEngine(t, g, repo, w, store, 3)
 
 	a, err := e.ClaimAndRun(ctx, "project = SCRUM", 10)
 	if err != nil {
@@ -144,24 +129,21 @@ func TestFullLifecycleToDone(t *testing.T) {
 	if a == nil || a.State != StateDone {
 		t.Fatalf("assignment = %+v, want Done", a)
 	}
-	if a.MergeSHA == "" {
-		t.Error("expected MergeSHA set")
-	}
 	if w.calls != 1 {
 		t.Errorf("worker called %d times, want 1", w.calls)
 	}
-	// the developed file must be merged into development in the main repo
+	// developed file merged into development
 	if _, err := os.Stat(filepath.Join(repo, "hello.txt")); err != nil {
 		t.Errorf("merged file missing: %v", err)
 	}
-	// branch + worktree cleaned up
-	if _, err := os.Stat(a.Worktree); !os.IsNotExist(err) {
-		t.Errorf("worktree not removed: %v", err)
+	// branch + worktree cleaned up (recomputed paths)
+	if _, err := os.Stat(e.worktreeFor("SCRUM-1")); !os.IsNotExist(err) {
+		t.Errorf("worktree not removed")
 	}
-	// persisted as done
+	// persisted state is minimal + Done
 	got, ok, _ := store.Load("SCRUM-1")
 	if !ok || got.State != StateDone {
-		t.Errorf("persisted state = %+v", got)
+		t.Errorf("persisted = %+v", got)
 	}
 }
 
@@ -169,18 +151,17 @@ func TestIssueLockPreventsReclaim(t *testing.T) {
 	ctx := context.Background()
 	g, repo := setupGit(t)
 	w := &fakeWorker{results: []WorkerResult{{OK: true, Summary: "x", Files: []File{{Path: "x.txt", Content: "x"}}}}}
-	e, _ := newEngine(t, g, repo, w, 3)
+	e := newEngine(t, g, repo, w, NewMemoryStore(), 3)
 
 	if _, err := e.ClaimAndRun(ctx, "jql", 10); err != nil {
 		t.Fatal(err)
 	}
-	// second run: SCRUM-1 already has a (Done) assignment → must be skipped, returns nil
-	a, err := e.ClaimAndRun(ctx, "jql", 10)
+	a, err := e.ClaimAndRun(ctx, "jql", 10) // SCRUM-1 now terminal → skipped
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a != nil {
-		t.Errorf("expected no new assignment (issue already processed), got %+v", a)
+		t.Errorf("expected no new assignment, got %+v", a)
 	}
 	if w.calls != 1 {
 		t.Errorf("worker called %d times, want 1 (no redo)", w.calls)
@@ -191,20 +172,16 @@ func TestRetryThenSucceed(t *testing.T) {
 	ctx := context.Background()
 	g, repo := setupGit(t)
 	w := &fakeWorker{results: []WorkerResult{
-		{OK: false, Notes: "first attempt fails"},
-		{OK: true, Summary: "ok now", Files: []File{{Path: "ok.txt", Content: "ok"}}},
+		{OK: false, Notes: "first fails"},
+		{OK: true, Summary: "ok", Files: []File{{Path: "ok.txt", Content: "ok"}}},
 	}}
-	e, _ := newEngine(t, g, repo, w, 3)
-
+	e := newEngine(t, g, repo, w, NewMemoryStore(), 3)
 	a, err := e.ClaimAndRun(ctx, "jql", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.State != StateDone {
-		t.Fatalf("state = %s, want Done", a.State)
-	}
-	if a.Attempt != 1 {
-		t.Errorf("attempt = %d, want 1", a.Attempt)
+	if a.State != StateDone || a.Attempt != 1 {
+		t.Errorf("state=%s attempt=%d, want Done/1", a.State, a.Attempt)
 	}
 }
 
@@ -212,29 +189,32 @@ func TestFailAfterMaxAttempts(t *testing.T) {
 	ctx := context.Background()
 	g, repo := setupGit(t)
 	w := &fakeWorker{results: []WorkerResult{{OK: false, Notes: "always fails"}}}
-	e, _ := newEngine(t, g, repo, w, 2)
-
+	e := newEngine(t, g, repo, w, NewMemoryStore(), 2)
 	a, err := e.ClaimAndRun(ctx, "jql", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.State != StateFailed {
-		t.Fatalf("state = %s, want Failed", a.State)
-	}
-	if a.Attempt != 2 {
-		t.Errorf("attempt = %d, want 2", a.Attempt)
+	if a.State != StateFailed || a.Attempt != 2 {
+		t.Errorf("state=%s attempt=%d, want Failed/2", a.State, a.Attempt)
 	}
 }
 
-// TestRestartResume proves Law 19: a fresh Engine sharing the same Store resumes an unfinished
-// Assignment from its last stable state and completes it, without redoing completed work.
-func TestRestartResume(t *testing.T) {
+// TestRestartResumeFromDisk proves Law 19 against real durable storage: a brand-new FileStore over
+// the same directory (a genuine reload from disk) resumes an unfinished Assignment to Done without
+// re-running completed work — using ONLY the persisted {issue,state,attempt} plus recomputed paths.
+func TestRestartResumeFromDisk(t *testing.T) {
 	ctx := context.Background()
 	g, repo := setupGit(t)
 	w := &fakeWorker{results: []WorkerResult{{OK: true, Summary: "dev", Files: []File{{Path: "r.txt", Content: "r"}}}}}
-	e1, store := newEngine(t, g, repo, w, 3)
 
-	// Drive up to the QA checkpoint, then "crash" (stop using e1).
+	dir := filepath.Join(t.TempDir(), "state")
+	store1, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e1 := newEngine(t, g, repo, w, store1, 3)
+
+	// Drive to the QA checkpoint, then "crash".
 	res, _ := e1.Jira.Search(ctx, "jql", nil, 10)
 	a, err := e1.claim(ctx, res.Issues[0])
 	if err != nil {
@@ -249,13 +229,14 @@ func TestRestartResume(t *testing.T) {
 	}
 	developCalls := w.calls
 
-	// Restart: brand-new Engine, same Store + repo + worker.
-	e2 := &Engine{
-		Owner: "engine-restarted", RepoPath: repo, DevBranch: "development",
-		WorktreeDir: e1.WorktreeDir, MaxAttempts: 3,
-		InProgress: []string{"In Progress"}, Done: []string{"Done"},
-		Jira: e1.Jira, Git: g, Worker: w, Store: store,
+	// Restart: NEW FileStore over the SAME dir → reload purely from disk.
+	store2, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
 	}
+	e2 := newEngine(t, g, repo, w, store2, 3)
+	e2.WorktreeDir = e1.WorktreeDir // same worktree location (recomputed, not stored)
+
 	resumed, err := e2.Resume(ctx)
 	if err != nil {
 		t.Fatalf("Resume: %v", err)
@@ -263,15 +244,13 @@ func TestRestartResume(t *testing.T) {
 	if len(resumed) != 1 {
 		t.Fatalf("resumed %d, want 1", len(resumed))
 	}
-	final, _, _ := store.Load("SCRUM-1")
+	final, _, _ := store2.Load("SCRUM-1")
 	if final.State != StateDone {
 		t.Errorf("post-resume state = %s, want Done", final.State)
 	}
-	// resume must NOT re-run the worker (develop already completed before the crash)
 	if w.calls != developCalls {
 		t.Errorf("worker re-invoked on resume (%d→%d): completed work redone", developCalls, w.calls)
 	}
-	// second Resume is a no-op (terminal not redone)
 	again, _ := e2.Resume(ctx)
 	if len(again) != 0 {
 		t.Errorf("second Resume found %d unfinished, want 0", len(again))

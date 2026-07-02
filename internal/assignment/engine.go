@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/myotgo/ClaudWorkerV2/internal/git"
 	"github.com/myotgo/ClaudWorkerV2/internal/jira"
@@ -14,10 +13,9 @@ import (
 
 // Engine drives one Assignment through its lifecycle. It is 100% deterministic Go (Law 18): it
 // coordinates the git/jira toolbelt and spawns a disposable AI worker via the Worker port, but
-// contains no AI reasoning itself. Dependencies are concrete (git, jira) — the only interface is
-// Worker (two real implementations). No speculative abstraction.
+// contains no AI reasoning itself. It depends only on the Store interface — it never knows the
+// storage implementation (docs/21 S3).
 type Engine struct {
-	Owner       string   // run/engine id recorded as the claim owner
 	RepoPath    string   // local clone; must be checked out on DevBranch
 	DevBranch   string   // integration branch (e.g. "development")
 	WorktreeDir string   // parent dir for per-Assignment worktrees
@@ -28,7 +26,7 @@ type Engine struct {
 	Jira   *jira.Client
 	Git    *git.Git
 	Worker Worker
-	Store  *Store
+	Store  Store
 	Log    *slog.Logger
 }
 
@@ -39,9 +37,15 @@ func (e *Engine) log() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
+// branchFor and worktreeFor recompute the physical work locations deterministically from the issue
+// key + engine config. Because they are recomputable, they are NOT persisted (S3): Git already holds
+// the branch/worktree, and the paths are pure functions of the key.
+func (e *Engine) branchFor(issueKey string) string   { return "agent/" + issueKey }
+func (e *Engine) worktreeFor(issueKey string) string { return filepath.Join(e.WorktreeDir, issueKey) }
+
 // ClaimAndRun searches the work queue, claims the first eligible unclaimed issue, and drives it to a
 // terminal state. Returns (nil, nil) when there is nothing eligible to do (an idle engine is a
-// success, P7). It never claims an issue that already has an active Assignment (issue lock).
+// success, P7). It never claims an issue that already has a stored Assignment (issue lock + no redo).
 func (e *Engine) ClaimAndRun(ctx context.Context, workJQL string, maxResults int) (*Assignment, error) {
 	res, err := e.Jira.Search(ctx, workJQL, nil, maxResults)
 	if err != nil {
@@ -49,7 +53,7 @@ func (e *Engine) ClaimAndRun(ctx context.Context, workJQL string, maxResults int
 	}
 	for _, iss := range res.Issues {
 		// Skip any issue that already has an Assignment — active (issue lock, I-1) or terminal
-		// (never redo completed work, Law 19). One active Assignment per issue is the lock.
+		// (never redo completed work, Law 19).
 		if prev, exists, err := e.Store.Load(iss.Key); err != nil {
 			return nil, err
 		} else if exists {
@@ -58,7 +62,7 @@ func (e *Engine) ClaimAndRun(ctx context.Context, workJQL string, maxResults int
 		}
 		a, err := e.claim(ctx, iss)
 		if err != nil {
-			return nil, err
+			return a, err
 		}
 		if err := e.drive(ctx, a); err != nil {
 			return a, err
@@ -69,62 +73,53 @@ func (e *Engine) ClaimAndRun(ctx context.Context, workJQL string, maxResults int
 }
 
 // Resume re-drives every unfinished Assignment after a restart. Completed work is never redone
-// (Law 19): terminal Assignments are ignored; each other resumes at its last stable state.
+// (Law 19): terminal Assignments are ignored; each other resumes at its last stable state, with
+// branch/worktree/summary recomputed (not loaded from storage — they were never stored).
 func (e *Engine) Resume(ctx context.Context) ([]*Assignment, error) {
-	unfinished, err := e.Store.Unfinished()
+	all, err := e.Store.List()
 	if err != nil {
 		return nil, err
 	}
-	for _, a := range unfinished {
+	todo := unfinished(all)
+	for _, a := range todo {
 		e.log().Info("assignment", "op", "resume", "issue", a.IssueKey, "state", string(a.State), "attempt", a.Attempt)
 		if err := e.drive(ctx, a); err != nil {
-			return unfinished, err
+			return todo, err
 		}
 	}
-	return unfinished, nil
+	return todo, nil
 }
 
 // claim creates the Assignment (the issue lock), transitions Jira to in-progress, and prepares the
 // branch + worktree. The Assignment is persisted before any external mutation so a crash mid-claim is
 // recoverable.
 func (e *Engine) claim(ctx context.Context, iss jira.Issue) (*Assignment, error) {
-	a := &Assignment{
-		ID:        iss.Key,
-		IssueKey:  iss.Key,
-		Owner:     e.Owner,
-		State:     StateClaimed,
-		Summary:   iss.Fields.Summary,
-		Branch:    "agent/" + iss.Key + "-" + slug(iss.Fields.Summary),
-		CreatedAt: nowUTC(),
-	}
-	a.Worktree = filepath.Join(e.WorktreeDir, iss.Key)
+	a := &Assignment{IssueKey: iss.Key, State: StateClaimed}
 	if err := e.Store.Save(a); err != nil {
 		return nil, err
 	}
-	// Jira: make ownership visible.
+	branch := e.branchFor(a.IssueKey)
 	if len(e.InProgress) > 0 {
 		if _, err := e.Jira.TransitionTo(ctx, iss.Key, e.InProgress...); err != nil {
 			e.log().Warn("assignment", "op", "claim.transition", "issue", iss.Key, "error", err.Error())
 		}
 	}
-	_, _ = e.Jira.AddComment(ctx, iss.Key, "ClaudWorker claimed this issue on branch "+a.Branch)
+	_, _ = e.Jira.AddComment(ctx, iss.Key, "ClaudWorker claimed this issue on branch "+branch)
 
-	// Git: fresh branch + worktree off the newest DevBranch.
 	if err := e.Git.Fetch(ctx, e.RepoPath); err != nil {
 		return a, e.fail(a, "fetch: "+err.Error())
 	}
-	if err := e.Git.CreateBranch(ctx, e.RepoPath, a.Branch, e.DevBranch); err != nil {
+	if err := e.Git.CreateBranch(ctx, e.RepoPath, branch, e.DevBranch); err != nil {
 		return a, e.fail(a, "branch: "+err.Error())
 	}
-	if _, err := e.Git.AddWorktree(ctx, e.RepoPath, a.Worktree, a.Branch, e.DevBranch); err != nil {
+	if _, err := e.Git.AddWorktree(ctx, e.RepoPath, e.worktreeFor(a.IssueKey), branch, e.DevBranch); err != nil {
 		return a, e.fail(a, "worktree: "+err.Error())
 	}
-	a.Progress = "claimed; worktree ready"
-	return a, e.Store.Save(a)
+	return a, nil
 }
 
 // drive is the deterministic state machine. Each step advances one state and persists, so the last
-// stable state is always on disk for resume. On a recoverable failure it retries from Developing up
+// stable state is always durable for resume. On a recoverable failure it retries from Developing up
 // to MaxAttempts; then it fails.
 func (e *Engine) drive(ctx context.Context, a *Assignment) error {
 	for !a.State.Terminal() {
@@ -150,16 +145,21 @@ func (e *Engine) drive(ctx context.Context, a *Assignment) error {
 	return nil
 }
 
-// develop spawns the one disposable AI worker, applies its proposed files, and commits. Re-running is
-// safe (the worker is disposable; an identical commit is a no-op).
+// develop spawns the one disposable AI worker, applies its proposed files, and commits. Summary and
+// acceptance criteria are re-fetched from Jira here (never stored). Re-running is safe (the worker is
+// disposable; an identical commit is a no-op).
 func (e *Engine) develop(ctx context.Context, a *Assignment) error {
+	iss, err := e.Jira.GetIssue(ctx, a.IssueKey)
+	if err != nil {
+		return e.retryOrFail(a, "get issue: "+err.Error())
+	}
 	ac, err := e.Jira.AcceptanceCriteria(ctx, a.IssueKey)
 	if err != nil {
 		return e.retryOrFail(a, "acceptance criteria: "+err.Error())
 	}
 	in := WorkerInput{
 		IssueKey:           a.IssueKey,
-		Summary:            a.Summary,
+		Summary:            iss.Fields.Summary,
 		AcceptanceCriteria: ac,
 		// RelevantFiles + KnowledgeContext arrive with the Knowledge Brain (S4); empty for now.
 	}
@@ -170,8 +170,9 @@ func (e *Engine) develop(ctx context.Context, a *Assignment) error {
 	if !res.OK {
 		return e.retryOrFail(a, "worker reported failure: "+res.Notes)
 	}
+	wt := e.worktreeFor(a.IssueKey)
 	for _, f := range res.Files {
-		dst := filepath.Join(a.Worktree, f.Path)
+		dst := filepath.Join(wt, f.Path)
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return e.retryOrFail(a, "write dir: "+err.Error())
 		}
@@ -179,18 +180,16 @@ func (e *Engine) develop(ctx context.Context, a *Assignment) error {
 			return e.retryOrFail(a, "write file: "+err.Error())
 		}
 	}
-	if _, err := e.Git.Commit(ctx, a.Worktree, commitMessage(a, res), true); err != nil {
+	if _, err := e.Git.Commit(ctx, wt, a.IssueKey+": "+workerSummary(res), true); err != nil {
 		return e.retryOrFail(a, "commit: "+err.Error())
 	}
-	a.Progress = "developed: " + res.Summary
 	a.State = StateQA
 	return e.Store.Save(a)
 }
 
-// handOffToQA hands the branch to QA. The QA subsystem is S8; the S2 skeleton implements the handover
-// boundary as a deterministic PASS so the vertical slice completes end-to-end.
+// handOffToQA hands the branch to QA. The QA subsystem is S8; the S2/S3 skeleton implements the
+// handover boundary as a deterministic PASS so the vertical slice completes end-to-end.
 func (e *Engine) handOffToQA(ctx context.Context, a *Assignment) error {
-	a.Progress = "QA handoff: PASS (skeleton — QA subsystem is S8)"
 	a.State = StateMerging
 	return e.Store.Save(a)
 }
@@ -198,27 +197,27 @@ func (e *Engine) handOffToQA(ctx context.Context, a *Assignment) error {
 // handOffToMerge performs the deterministic Merge handover: refresh, --no-ff merge into DevBranch,
 // then delete the branch + worktree. A conflict is reported and retried (bounded), never forced.
 func (e *Engine) handOffToMerge(ctx context.Context, a *Assignment) error {
+	branch := e.branchFor(a.IssueKey)
 	if err := e.Git.Fetch(ctx, e.RepoPath); err != nil {
 		return e.retryOrFail(a, "merge fetch: "+err.Error())
 	}
-	mr, err := e.Git.Merge(ctx, e.RepoPath, a.Branch, "Merge "+a.Branch+" ("+a.IssueKey+")")
+	mr, err := e.Git.Merge(ctx, e.RepoPath, branch, "Merge "+branch+" ("+a.IssueKey+")")
 	if err != nil {
 		return e.retryOrFail(a, "merge: "+err.Error())
 	}
 	if !mr.Merged {
 		return e.retryOrFail(a, fmt.Sprintf("merge conflict: %v", mr.Conflicts))
 	}
-	a.MergeSHA = mr.SHA
-	_ = e.Git.RemoveWorktree(ctx, e.RepoPath, a.Worktree)
-	_ = e.Git.DeleteBranch(ctx, e.RepoPath, a.Branch, true)
+	_ = e.Git.RemoveWorktree(ctx, e.RepoPath, e.worktreeFor(a.IssueKey))
+	_ = e.Git.DeleteBranch(ctx, e.RepoPath, branch, true)
 
 	if len(e.Done) > 0 {
 		if _, err := e.Jira.TransitionTo(ctx, a.IssueKey, e.Done...); err != nil {
 			e.log().Warn("assignment", "op", "close.transition", "issue", a.IssueKey, "error", err.Error())
 		}
 	}
-	_, _ = e.Jira.AddComment(ctx, a.IssueKey, "Merged to "+e.DevBranch+" at "+a.MergeSHA)
-	a.Progress = "merged " + a.MergeSHA
+	_, _ = e.Jira.AddComment(ctx, a.IssueKey, "Merged to "+e.DevBranch+" at "+mr.SHA)
+	e.log().Info("assignment", "op", "merged", "issue", a.IssueKey, "sha", mr.SHA)
 	a.State = StateDone
 	return e.Store.Save(a)
 }
@@ -228,49 +227,22 @@ func (e *Engine) retryOrFail(a *Assignment, reason string) error {
 	a.Attempt++
 	if a.Attempt < e.MaxAttempts {
 		e.log().Warn("assignment", "op", "retry", "issue", a.IssueKey, "attempt", a.Attempt, "reason", reason)
-		a.Progress = "retry " + fmt.Sprintf("%d", a.Attempt) + ": " + reason
 		a.State = StateDeveloping
 		return e.Store.Save(a)
 	}
 	return e.fail(a, reason)
 }
 
-// fail marks the Assignment failed (attempts exhausted / unrecoverable). NEEDS_HUMAN labeling and
-// notification are wired with the full workflow later; here we record the terminal failure.
+// fail marks the Assignment failed (attempts exhausted / unrecoverable).
 func (e *Engine) fail(a *Assignment, reason string) error {
 	e.log().Error("assignment", "op", "fail", "issue", a.IssueKey, "attempt", a.Attempt, "reason", reason)
 	a.State = StateFailed
-	a.Progress = "failed: " + reason
 	return e.Store.Save(a)
 }
 
-func commitMessage(a *Assignment, res WorkerResult) string {
-	m := res.Summary
-	if m == "" {
-		m = "work for " + a.IssueKey
+func workerSummary(res WorkerResult) string {
+	if res.Summary == "" {
+		return "work"
 	}
-	return a.IssueKey + ": " + m
-}
-
-// slug makes a short, filesystem/branch-safe suffix from an issue summary.
-func slug(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	var b strings.Builder
-	n := 0
-	for _, r := range s {
-		if n >= 24 {
-			break
-		}
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			n++
-		case r == ' ' || r == '-' || r == '_':
-			if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
-				b.WriteByte('-')
-				n++
-			}
-		}
-	}
-	return strings.Trim(b.String(), "-")
+	return res.Summary
 }

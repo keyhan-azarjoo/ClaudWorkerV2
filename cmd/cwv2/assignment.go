@@ -43,7 +43,7 @@ func cmdAssignment(args []string) int {
 		return emitErr(err)
 	}
 	l := enginehome.For(cfg.EngineHome, cfg.Project)
-	store, err := assignment.NewStore(l.Assignments)
+	store, err := assignment.NewFileStore(l.Assignments)
 	if err != nil {
 		return emitErr(err)
 	}
@@ -55,15 +55,13 @@ func cmdAssignment(args []string) int {
 			return emitErr(err)
 		}
 		type row struct {
-			ID       string `json:"id"`
-			Issue    string `json:"issue"`
-			State    string `json:"state"`
-			Attempt  int    `json:"attempt"`
-			Progress string `json:"progress"`
+			Issue   string `json:"issue"`
+			State   string `json:"state"`
+			Attempt int    `json:"attempt"`
 		}
 		rows := make([]row, 0, len(all))
 		for _, a := range all {
-			rows = append(rows, row{a.ID, a.IssueKey, string(a.State), a.Attempt, a.Progress})
+			rows = append(rows, row{a.IssueKey, string(a.State), a.Attempt})
 		}
 		emit(map[string]any{"assignments": rows, "count": len(rows)})
 	default:
