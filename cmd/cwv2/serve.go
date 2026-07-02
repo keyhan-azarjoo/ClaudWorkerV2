@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -56,6 +57,9 @@ func cmdServe(args []string) int {
 	bind := fs.String("bind", ":8080", "HTTP bind address for the Control Plane API")
 	web := fs.String("web", "", "directory of the Operations Console to serve at / (optional)")
 	claudeBin := fs.String("claude-bin", "claude", "Claude Code CLI binary (live mode worker)")
+	buildCmd := fs.String("build-cmd", "", "live-mode build verification command (default: go build ./...)")
+	apiURL := fs.String("api-url", "", "live-mode API verification URL (optional)")
+	webURL := fs.String("web-url", "", "live-mode website verification URL (optional)")
 	once := fs.Bool("once", false, "run one orchestration step and exit")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -71,7 +75,7 @@ func cmdServe(args []string) int {
 	}
 	log := logging.Default()
 
-	o, cp, err := buildOrchestrator(*cfg, *mode, *claudeBin)
+	o, cp, err := buildOrchestrator(*cfg, *mode, *claudeBin, verifyOpts{buildCmd: *buildCmd, apiURL: *apiURL, webURL: *webURL})
 	if err != nil {
 		return emitErr(err)
 	}
@@ -121,7 +125,10 @@ func cmdServe(args []string) int {
 // stores); simulation uses in-memory stores. Only the Jira edge is real in live mode today (Phase 2
 // #1); the remaining edges use the deterministic sim adapters until their iterations, keeping the
 // platform fully functional at every step.
-func buildOrchestrator(cfg config.Config, mode, claudeBin string) (*orchestrator.Orchestrator, *controlplane.Server, error) {
+// verifyOpts carries the live-mode verification targets (build/API/web) from serve flags.
+type verifyOpts struct{ buildCmd, apiURL, webURL string }
+
+func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOpts) (*orchestrator.Orchestrator, *controlplane.Server, error) {
 	live := mode == "live"
 	l := enginehome.For(cfg.EngineHome, cfg.Project)
 	if err := l.Ensure(); err != nil {
@@ -200,7 +207,11 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string) (*orchestrator
 		if len(cfg.Repos) > 0 {
 			repoLocal = filepath.Join(l.ProjectDir, "repos", cfg.Repos[0].Name)
 		}
-		veng, vplan := verifyadapter.BuildEngine(verifyadapter.Options{RepoDir: repoLocal})
+		vo := verifyadapter.Options{RepoDir: repoLocal, APIURL: vopts.apiURL, WebURL: vopts.webURL}
+		if vopts.buildCmd != "" {
+			vo.BuildCmd = strings.Fields(vopts.buildCmd)
+		}
+		veng, vplan := verifyadapter.BuildEngine(vo)
 		verifyPort = verifyadapter.New(veng, vplan...)
 	}
 

@@ -1,0 +1,21 @@
+# MyOTGO fleet — resource + account mapping + discovery (from V1 migration).
+# Discovery auto-finds accounts (~/.cw-accounts/*, ~/.claude), local providers (Ollama :11434,
+# LM Studio :1234), and devices (adb/simctl/serial). Declared infra below is added on top.
+
+accounts:                # Claude / Codex accounts (config dirs are references; creds stay in Keychain)
+  - id: MyOTGO        ; engine: claude ; config_dir: ~/.cw-accounts/myotgo
+  - id: SOT-Claud     ; engine: claude ; config_dir: ~/.cw-accounts/sot-claud
+  - id: SPT-Codex     ; engine: codex  ; config_dir: ~/.codex/spt
+  - id: MyOTGO-Codex  ; engine: codex  ; config_dir: ~/.codex/myotgo
+
+local_providers:
+  - id: ollama    ; base_url: http://127.0.0.1:11434
+  - id: lmstudio  ; base_url: http://127.0.0.1:1234
+
+devices:                 # discovered live; listed for reference / static fallback
+  - name: "Windows build server" ; kind: build_machine ; reach: 192.168.55.52
+  - name: "Mac Mini"             ; kind: mac_mini      ; reach: local        # ADD real host
+  - name: "DGX"                  ; kind: build_machine  ; reach: ""           # ADD when connected
+  - name: "Android (Galaxy A6)"  ; kind: android_device ; reach: "192.168.55.190 / adb"
+  - name: "iPhone (real)"        ; kind: iphone         ; reach: "WDA"
+  - name: "ESP32 #1..3"          ; kind: esp32          ; reach: "/dev/cu.usb*"

@@ -1,0 +1,45 @@
+# ClaudWorker V2 — MyOTGO production config.
+# READY TO RUN once the secret NAMES below resolve (Keychain / Azure KV / env). No values here.
+# Validate: cwv2 validate --config deploy/myotgo/cwv2.yaml
+
+project: myotgo
+engine_home: /var/lib/cwv2            # persistent volume; holds durable state (knowledge/assignments/leases)
+
+github:
+  user: keyhan-azarjoo
+  commit_identity:
+    name: keyhanazarjoo
+    email: keyhanazarjoo@gmail.com
+
+# Repositories the platform works on. Pick ONE to pilot first (recommend the backend or a small repo).
+repos:
+  - name: backend
+    url: https://github.com/myotgo/DotNet-IoT-MainWebApi.git
+    dev_branch: development
+    plugin: generic
+  # - name: mobile-app
+  #   url: https://github.com/myotgo/Flutter-IoT-MobileApp.git
+  #   dev_branch: development
+  #   plugin: generic
+  # - name: website
+  #   url: https://github.com/myotgo/NextJs-Myotgo-Website.git
+  #   dev_branch: development
+  #   plugin: generic
+
+jira:
+  base_url: https://myotgo.atlassian.net       # CONFIRM
+  project_key: SCRUM
+  work_jql: 'project = SCRUM AND status = "To Do" AND labels = ready ORDER BY priority DESC'
+  auth:
+    user_secret: myotgo-jira-email             # secret NAME → resolves to the Atlassian account email
+    token_secret: myotgo-jira-token            # secret NAME → resolves to the Atlassian API token
+
+usage_guard: { pause_pct: 95, resume_pct: 80, fail_open: false }   # migrated from V1 (98/95 → tuned)
+
+dashboard:
+  token: myotgo-controlplane-token             # secret NAME → Control Plane bearer token
+
+# ── Per-repo build / verification commands are passed to `serve` as flags (see live-acceptance.sh):
+#   backend  (.NET):   --build-cmd "dotnet build" --api-url https://api.myotgo.com/health
+#   mobile   (Flutter):--build-cmd "flutter build apk --debug"
+#   website  (NextJs): --build-cmd "npm run build"   --web-url https://myotgo.com
