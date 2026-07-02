@@ -53,6 +53,8 @@ func run(args []string) int {
 		return cmdKnowledge(args[1:])
 	case "worker":
 		return cmdWorker(args[1:])
+	case "serve":
+		return cmdServe(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return 0
@@ -75,6 +77,7 @@ usage:
   cwv2 assignment list --config <cwv2.yaml>       (inspect the Assignment store)
   cwv2 knowledge  <subcommand> --config <cwv2.yaml> (Knowledge Brain; deterministic, zero tokens)
   cwv2 worker     prompt ...                       (render a Worker Runtime prompt; zero tokens)
+  cwv2 serve      --config <cwv2.yaml> [--mode live|simulation]  (run the Orchestrator + Control Plane)
 
   cwv2 git        help
   cwv2 jira       help
