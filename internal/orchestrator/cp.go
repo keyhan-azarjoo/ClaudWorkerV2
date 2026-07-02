@@ -67,6 +67,11 @@ func (o *Orchestrator) RegisterControlPlane() {
 		copy(out, o.decisions)
 		return out, nil
 	})
+	// task.stream?issue=SCRUM-123 — the live agent activity (thinking/doing/responses) for one task,
+	// so a box can expand into the full transcript.
+	o.CP.Query("task.stream", func(_ context.Context, q url.Values) (any, error) {
+		return map[string]any{"issue": q.Get("issue"), "lines": o.TaskStream(q.Get("issue"))}, nil
+	})
 	// tasks.activity — per-task action timeline for the dashboard task boxes (newest task first). The
 	// live assignment State is read from the Store (the log records the ordered actions, not the state).
 	o.CP.Query("tasks.activity", func(context.Context, url.Values) (any, error) {
@@ -114,6 +119,19 @@ func (o *Orchestrator) RegisterControlPlane() {
 		req.Account = strings.TrimSpace(req.Account)
 		if req.Issue == "" {
 			return nil, fmt.Errorf("issue key required")
+		}
+		// Reject a double-run SYNCHRONOUSLY so the UI sees it: never run a ticket that is already
+		// running, or re-run one that is already finished. (Belt to the in-flight guard in the loop.)
+		if a, exists, _ := o.Store.Load(req.Issue); exists {
+			if a.State.Terminal() {
+				return nil, fmt.Errorf("%s is already %s — not running again", req.Issue, a.State)
+			}
+			o.mu.Lock()
+			running := o.inflight[req.Issue]
+			o.mu.Unlock()
+			if running {
+				return nil, fmt.Errorf("%s is already running", req.Issue)
+			}
 		}
 		go func() {
 			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account); err != nil {
