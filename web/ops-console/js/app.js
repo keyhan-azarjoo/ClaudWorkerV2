@@ -5,6 +5,7 @@ import { EventStream } from "events";
 import { store } from "store";
 import * as router from "router";
 import { el, icon, statusDot } from "ui";
+import { api } from "api";
 
 // Navigation model. The Dashboard is only the landing page of the console.
 const NAV = [
@@ -113,7 +114,37 @@ function build() {
   const connText = el("span", {}, "connecting…");
   const conn = el("span", { class: "conn" }, connDot, connText);
   const menuBtn = el("button", { class: "btn ghost menu-toggle", onClick: () => app.classList.toggle("nav-open") }, "☰");
-  const topbar = el("header", { class: "topbar" }, menuBtn, title, el("span", { class: "spacer" }), conn);
+
+  // Manual Start/Stop control (idle-by-default): the platform never auto-processes; the operator
+  // presses "Start Working" to claim + process the Jira queue, and "Stop" to return to idle.
+  const workBadge = el("span", { class: "workstate" }, "…");
+  const workBtn = el("button", { class: "btn" }, "Start Working");
+  let workBusy = false;
+  async function refreshWorkState() {
+    try {
+      const s = await api.status();
+      const active = !!(s?.data?.orchestrator?.active);
+      workBadge.textContent = active ? "● Working" : "○ Idle";
+      workBadge.className = "workstate " + (active ? "on" : "off");
+      workBtn.textContent = active ? "Stop" : "Start Working";
+      workBtn.className = "btn " + (active ? "danger" : "primary");
+    } catch { workBadge.textContent = "?"; }
+  }
+  workBtn.onclick = async () => {
+    if (workBusy) return; workBusy = true;
+    try {
+      const s = await api.status();
+      const active = !!(s?.data?.orchestrator?.active);
+      await api.command(active ? "orchestrator.stop" : "orchestrator.start");
+    } catch (e) { /* surfaced via refresh */ }
+    workBusy = false;
+    refreshWorkState();
+  };
+  const workctl = el("span", { class: "workctl" }, workBadge, workBtn);
+
+  const topbar = el("header", { class: "topbar" }, menuBtn, title, el("span", { class: "spacer" }), workctl, conn);
+  refreshWorkState();
+  setInterval(refreshWorkState, 5000);
 
   const outlet = el("div", { class: "content" });
   const main = el("main", { class: "main" }, topbar, outlet);

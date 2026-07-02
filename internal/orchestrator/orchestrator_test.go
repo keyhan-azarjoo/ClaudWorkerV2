@@ -220,6 +220,7 @@ func TestRecoverySkipsTerminalResumesUnfinished(t *testing.T) {
 	_ = h.store.Save(&assignment.Assignment{IssueKey: "DONE-1", State: assignment.StateDone})
 	_ = h.store.Save(&assignment.Assignment{IssueKey: "SCRUM-9", State: assignment.StateDeveloping})
 
+	h.o.SetActive(true) // resume only happens when the loop is active (idle-by-default)
 	if err := h.o.Recover(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -233,6 +234,38 @@ func TestRecoverySkipsTerminalResumesUnfinished(t *testing.T) {
 	}
 	if h.dev.calls < 1 {
 		t.Error("resume did not run the worker")
+	}
+}
+
+// TestIdleByDefaultSkipsResume guards the idle-by-default contract: a freshly built loop is not
+// active, and Recover must NOT resume interrupted work until it is started (manual "Start Working").
+func TestIdleByDefaultSkipsResume(t *testing.T) {
+	h := newHarness(t, []Issue{{Key: "SCRUM-9", Summary: "resume me"}}, [][]verify.Result{pass()}, true)
+	_ = h.store.Save(&assignment.Assignment{IssueKey: "SCRUM-9", State: assignment.StateDeveloping})
+
+	if h.o.IsActive() {
+		t.Fatal("orchestrator must start idle (inactive) by default")
+	}
+	if err := h.o.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	resumed, _, _ := h.store.Load("SCRUM-9")
+	if resumed.State == assignment.StateDone {
+		t.Error("idle orchestrator must NOT resume work before being started")
+	}
+	if h.dev.calls != 0 {
+		t.Errorf("worker ran while idle: %d calls", h.dev.calls)
+	}
+	// After starting, resume proceeds.
+	h.o.SetActive(true)
+	if !h.o.IsActive() {
+		t.Fatal("SetActive(true) did not activate")
+	}
+	if err := h.o.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if done, _, _ := h.store.Load("SCRUM-9"); done.State != assignment.StateDone {
+		t.Errorf("after start, unfinished work not resumed: %s", done.State)
 	}
 }
 

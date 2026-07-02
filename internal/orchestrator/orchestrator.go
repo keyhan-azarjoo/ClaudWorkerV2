@@ -90,6 +90,9 @@ type Config struct {
 	MaxImprovementIters int    // safety ceiling for the improvement loop (0 = default)
 	InProgressStatus    string // Jira status name for "in progress"
 	DoneStatus          string // Jira status name for "done"
+	StartActive         bool   // if false (default), the loop starts IDLE and claims no work until
+	//                            orchestrator.start is issued (manual "Start Working"). Interrupted
+	//                            assignments are also not auto-resumed while idle.
 }
 
 // Orchestrator wires the subsystems and runs the loop. It holds subsystem INSTANCES (deterministic,
@@ -118,7 +121,26 @@ type Orchestrator struct {
 	counters  map[string]int
 	decisions []map[string]any // policy-decision ring for the Policies page
 	lastIssue string
-	running   bool
+	running   bool // the serve loop goroutine is alive
+	active    bool // the loop is claiming/processing work (vs. attached-but-idle)
+}
+
+// SetActive turns work processing on or off. Turning it on wakes the loop so it drains eligible work;
+// turning it off leaves the loop alive but idle (it claims nothing new). Safe to call from a command.
+func (o *Orchestrator) SetActive(a bool) {
+	o.mu.Lock()
+	o.active = a
+	o.mu.Unlock()
+	if a {
+		o.Notify()
+	}
+}
+
+// IsActive reports whether the loop is currently processing work.
+func (o *Orchestrator) IsActive() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.active
 }
 
 // Option configures the Orchestrator.
@@ -199,6 +221,7 @@ func (o *Orchestrator) Notify() {
 func (o *Orchestrator) Run(ctx context.Context) error {
 	o.mu.Lock()
 	o.running = true
+	o.active = o.Cfg.StartActive // idle by default unless configured to start active
 	o.mu.Unlock()
 	defer func() { o.mu.Lock(); o.running = false; o.mu.Unlock() }()
 
@@ -206,7 +229,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		o.log().Error("orchestrator", "op", "recover", "error", err.Error())
 	}
 	for {
-		for {
+		for o.IsActive() { // drain only while active; idle otherwise (no work claimed)
 			did, err := o.ProcessOnce(ctx)
 			if err != nil {
 				o.log().Error("orchestrator", "op", "process", "error", err.Error())
@@ -239,6 +262,9 @@ func (o *Orchestrator) Recover(ctx context.Context) error {
 	for _, a := range all {
 		if a.State.Terminal() {
 			continue // never restart completed work (Law 19)
+		}
+		if !o.IsActive() {
+			continue // idle: do not auto-resume interrupted work until manually started
 		}
 		iss, err := o.Jira.Get(ctx, a.IssueKey)
 		if err != nil {
