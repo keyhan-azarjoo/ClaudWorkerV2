@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClaudWorker V2 — Operations Console</title>
+  <meta name="description" content="Operations Console for ClaudWorker V2 — a client of the Control Plane API." />
+  <link rel="stylesheet" href="./css/app.css" />
+  <!-- Import map lets modules use clean specifiers with no bundler (framework-free, no build step). -->
+  <script type="importmap">
+  {
+    "imports": {
+      "api": "./js/api.js",
+      "events": "./js/events.js",
+      "store": "./js/store.js",
+      "router": "./js/router.js",
+      "ui": "./js/ui.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app" class="app" aria-busy="true">
+    <div class="boot">Loading Operations Console…</div>
+  </div>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
