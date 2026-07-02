@@ -27,7 +27,24 @@ type Engine struct {
 	Git    *git.Git
 	Worker Worker
 	Store  Store
+	Retry  RetryDecider // Policy Engine port (S6); nil → fall back to MaxAttempts
 	Log    *slog.Logger
+}
+
+// RetryDecider is the Policy Engine port the engine ASKS for the retry decision (S6). The engine no
+// longer encodes the retry cap: when a RetryDecider is injected it owns the decision; the MaxAttempts
+// field is only a fallback for callers that do not wire a policy.
+type RetryDecider interface {
+	// ShouldRetry reports whether an Assignment that has now made `attempts` attempts should retry.
+	ShouldRetry(attempts int) bool
+}
+
+// shouldRetry consults the injected policy, or falls back to the MaxAttempts cap when none is wired.
+func (e *Engine) shouldRetry(attempts int) bool {
+	if e.Retry != nil {
+		return e.Retry.ShouldRetry(attempts)
+	}
+	return attempts < e.MaxAttempts
 }
 
 func (e *Engine) log() *slog.Logger {
@@ -228,7 +245,7 @@ func (e *Engine) handOffToMerge(ctx context.Context, a *Assignment) error {
 // retryOrFail increments the attempt and either retries from Developing or fails the Assignment.
 func (e *Engine) retryOrFail(a *Assignment, reason string) error {
 	a.Attempt++
-	if a.Attempt < e.MaxAttempts {
+	if e.shouldRetry(a.Attempt) {
 		e.log().Warn("assignment", "op", "retry", "issue", a.IssueKey, "attempt", a.Attempt, "reason", reason)
 		a.State = StateDeveloping
 		return e.Store.Save(a)
