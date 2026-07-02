@@ -188,6 +188,7 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 		cleaner    orchestrator.Workspace                     // nil in simulation
 		verifyPort orchestrator.Verifier  = sim.NewVerifier() // real in live
 		liveJira   *jiraadapter.Adapter
+		jiraClient *jira.Client
 		gitA       *gitadapter.Adapter
 		worker     *runtimeadapter.Worker
 	)
@@ -196,7 +197,8 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 		if err != nil {
 			return nil, nil, fmt.Errorf("live mode: %w", err)
 		}
-		liveJira = jiraadapter.New(jira.New(cfg.Jira.BaseURL, email, token), cfg.Jira.WorkJQL)
+		jiraClient = jira.New(cfg.Jira.BaseURL, email, token)
+		liveJira = jiraadapter.New(jiraClient, cfg.Jira.WorkJQL)
 		jiraPort = liveJira
 
 		gitA, err = buildGit(cfg, l)
@@ -246,6 +248,10 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 	// Live Jira page becomes real.
 	if liveJira != nil {
 		cp.Query("jira.queue", func(ctx context.Context, _ url.Values) (any, error) { return liveJira.Queue(ctx) })
+		// jira.backlog: the actual open board (not just ready-to-work) so the console shows real tasks.
+		cp.Query("jira.backlog", func(ctx context.Context, _ url.Values) (any, error) {
+			return jiraBacklog(ctx, jiraClient, projectKeyFromJQL(cfg.Jira.WorkJQL))
+		})
 	}
 	// Live Git state → Control Plane (active worktrees, merge/conflict/cleanup status).
 	if gitA != nil {

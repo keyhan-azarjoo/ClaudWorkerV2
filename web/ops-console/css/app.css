@@ -178,3 +178,13 @@ table.tbl td.mono, table.tbl td .mono { font-family: var(--mono); font-size: 12p
 .workstate.on { color: #fff; background: var(--ok, #1a7f45); border-color: transparent; }
 .workstate.off { color: var(--muted, #888); }
 .btn.danger { background: var(--danger, #b3261e); border-color: var(--danger, #b3261e); color: #fff; }
+
+/* Login screen (shown until a valid access token is entered) */
+.login-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: var(--bg, #0d1117); padding: 20px; }
+.login-card { width: 100%; max-width: 340px; background: var(--surface, #161b22); border: 1px solid var(--border-strong, #30363d); border-radius: 14px; padding: 28px 24px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.4); }
+.login-logo { width: 46px; height: 46px; margin: 0 auto 14px; border-radius: 11px; background: var(--accent, #2f81f7); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; letter-spacing: .5px; }
+.login-card h2 { margin: 0 0 4px; font-size: 18px; }
+.login-sub { margin: 0 0 18px; color: var(--muted, #8b949e); font-size: 13px; }
+.login-input { width: 100%; box-sizing: border-box; padding: 11px 13px; border-radius: 9px; border: 1px solid var(--border-strong, #30363d); background: var(--surface-2, #0d1117); color: var(--text, #e6edf3); font-size: 15px; margin-bottom: 12px; }
+.login-btn { width: 100%; justify-content: center; padding: 11px; font-size: 15px; }
+.login-err { color: var(--danger, #f85149); font-size: 12.5px; margin-top: 10px; min-height: 16px; }

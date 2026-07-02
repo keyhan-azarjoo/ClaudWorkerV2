@@ -5,7 +5,7 @@ import { EventStream } from "events";
 import { store } from "store";
 import * as router from "router";
 import { el, icon, statusDot } from "ui";
-import { api } from "api";
+import { api, config, setConfig } from "api";
 
 // Navigation model. The Dashboard is only the landing page of the console.
 const NAV = [
@@ -69,10 +69,66 @@ const MODULES = {
   "/settings": () => import("./modules/settings.js"),
 };
 
-function build() {
+// hasValidToken tests the stored token against the Control Plane (cheap, authenticated).
+async function hasValidToken() {
+  if (!config().token) return false;
+  try {
+    await api.status();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ensureAuth shows a login screen until a working access token is entered. This is what makes the
+// site usable on a fresh device: without it the console just shows "offline" (401 on every call).
+async function ensureAuth() {
+  if (await hasValidToken()) return;
+  await new Promise((resolve) => {
+    const input = el("input", { type: "password", class: "login-input", placeholder: "Access token", autocomplete: "current-password" });
+    const err = el("div", { class: "login-err" });
+    const btn = el("button", { class: "btn primary login-btn" }, "Connect");
+    async function attempt() {
+      setConfig({ token: input.value.trim() });
+      btn.textContent = "Connecting…";
+      err.textContent = "";
+      if (await hasValidToken()) {
+        overlay.remove();
+        resolve();
+      } else {
+        btn.textContent = "Connect";
+        err.textContent = "That token didn’t work. Check it and try again.";
+      }
+    }
+    btn.onclick = attempt;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") attempt();
+    });
+    const overlay = el(
+      "div",
+      { class: "login-overlay" },
+      el(
+        "div",
+        { class: "login-card" },
+        el("div", { class: "login-logo" }, "CW"),
+        el("h2", {}, "ClaudWorker V2"),
+        el("p", { class: "login-sub" }, "Enter your access token to connect."),
+        input,
+        btn,
+        err
+      )
+    );
+    document.body.append(overlay);
+    setTimeout(() => input.focus(), 50);
+  });
+}
+
+async function build() {
   // Apply the persisted theme (dark-first default set in index.html).
   const savedTheme = localStorage.getItem("oc.theme");
   if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+
+  await ensureAuth();
 
   const app = document.getElementById("app");
   app.removeAttribute("aria-busy");
@@ -125,7 +181,7 @@ function build() {
   async function refreshWorkState() {
     try {
       const s = await api.status();
-      const active = !!(s?.data?.orchestrator?.active);
+      const active = !!(s?.orchestrator?.active);
       workBadge.textContent = active ? "● Working" : "○ Idle";
       workBadge.className = "workstate " + (active ? "on" : "off");
       workBtn.textContent = active ? "Stop" : "Start Working";
@@ -136,7 +192,7 @@ function build() {
     if (workBusy) return; workBusy = true;
     try {
       const s = await api.status();
-      const active = !!(s?.data?.orchestrator?.active);
+      const active = !!(s?.orchestrator?.active);
       await api.command(active ? "orchestrator.stop" : "orchestrator.start");
     } catch (e) { /* surfaced via refresh */ }
     workBusy = false;
