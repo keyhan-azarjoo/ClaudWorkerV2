@@ -106,20 +106,22 @@ func (o *Orchestrator) RegisterControlPlane() {
 	// regardless of the ready label or idle state. Runs in the background; watch via events/assignments.
 	o.CP.Command("orchestrator.run", func(_ context.Context, body []byte) (any, error) {
 		var req struct {
-			Issue string `json:"issue"`
+			Issue   string `json:"issue"`
+			Account string `json:"account"` // optional: run on THIS account (else auto-select)
 		}
 		_ = json.Unmarshal(body, &req)
 		req.Issue = strings.TrimSpace(req.Issue)
+		req.Account = strings.TrimSpace(req.Account)
 		if req.Issue == "" {
 			return nil, fmt.Errorf("issue key required")
 		}
 		go func() {
-			if _, err := o.RunIssue(context.Background(), req.Issue); err != nil {
+			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account); err != nil {
 				o.log().Error("orchestrator", "op", "manual-run", "issue", req.Issue, "error", err.Error())
 				o.emit("AssignmentFailed", "orchestrator", map[string]any{"issue": req.Issue, "error": err.Error()})
 			}
 		}()
-		return map[string]any{"issue": req.Issue, "started": true}, nil
+		return map[string]any{"issue": req.Issue, "account": req.Account, "started": true}, nil
 	})
 	// accounts.pause / accounts.resume {"id":"acct-myotgo"} — per-account operator control (V1 parity).
 	o.CP.Command("accounts.pause", func(_ context.Context, body []byte) (any, error) {

@@ -328,7 +328,7 @@ func (o *Orchestrator) Recover(ctx context.Context) error {
 			continue
 		}
 		o.emit("AssignmentResumed", "orchestrator", map[string]any{"issue": a.IssueKey, "state": string(a.State)})
-		_ = o.runAssignment(ctx, a, iss)
+		_ = o.runAssignment(ctx, a, iss, "")
 	}
 	return nil
 }
@@ -347,7 +347,7 @@ func (o *Orchestrator) ProcessOnce(ctx context.Context) (bool, error) {
 	if err != nil || !ok {
 		return false, err
 	}
-	return true, o.runAssignment(ctx, a, iss)
+	return true, o.runAssignment(ctx, a, iss, "")
 }
 
 // claimNext finds the first eligible, unclaimed issue and claims it: persist the Assignment, acquire
@@ -389,7 +389,7 @@ func (o *Orchestrator) claimNext(ctx context.Context) (*assignment.Assignment, I
 // RunIssue claims and runs ONE specific issue on demand (operator "run this ticket"), bypassing the
 // ready-label queue and the idle gate. It still respects the budget gate and the issue lock (never
 // redoes terminal work). Intended to be called in a goroutine — it runs the full pipeline.
-func (o *Orchestrator) RunIssue(ctx context.Context, key string) (bool, error) {
+func (o *Orchestrator) RunIssue(ctx context.Context, key, account string) (bool, error) {
 	if key == "" {
 		return false, fmt.Errorf("issue key required")
 	}
@@ -408,7 +408,7 @@ func (o *Orchestrator) RunIssue(ctx context.Context, key string) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		return true, o.runAssignment(ctx, a, iss)
+		return true, o.runAssignment(ctx, a, iss, account)
 	}
 	// Fresh claim for this specific issue.
 	iss, err := o.Jira.Get(ctx, key)
@@ -431,7 +431,7 @@ func (o *Orchestrator) RunIssue(ctx context.Context, key string) (bool, error) {
 	o.mu.Unlock()
 	o.emit(controlplane.EventAssignmentCreated, "assignment", map[string]any{"issue": key, "state": string(a.State)})
 	o.recordAction(key, "claimed", "done", "")
-	return true, o.runAssignment(ctx, a, iss)
+	return true, o.runAssignment(ctx, a, iss, account)
 }
 
 // keywords derives deterministic relevance terms from the task for the Knowledge Brain.

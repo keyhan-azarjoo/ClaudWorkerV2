@@ -112,9 +112,16 @@ func BuildPrompt(in assignment.WorkerInput) string {
 		}
 	}
 
-	// Output contract: the provider must reply with ONE JSON object matching WorkerResult so response
-	// collection is deterministic (no free-form parsing elsewhere).
+	// Working style: this runs as Claude Code inside the task's git worktree, so it can make real edits
+	// directly AND spawn its own parallel subagents — the "several agents on one task, same branch" model.
+	b.WriteString("\n# Working style\n")
+	b.WriteString("You are working INSIDE this task's git worktree (your current directory). Make the real code changes directly here.\n")
+	b.WriteString("When the task is large or divisible, spawn MULTIPLE PARALLEL SUBAGENTS (the Task tool) — up to 10 — to work together on this ONE task on the SAME branch, to finish faster and more accurately. Give each subagent a DIFFERENT part / different files so they never edit the same file at once. For a small task, do it directly with one. Make sure the combined result is coherent and complete before finishing.\n")
+
+	// Output contract: reply with ONE JSON object matching WorkerResult so response collection is
+	// deterministic. Edits are made directly in the worktree, so "files" may be empty even on success
+	// (the Git side commits the physical changes).
 	b.WriteString("\n# Response format\n")
-	b.WriteString(`Reply with a single JSON object: {"ok":bool,"summary":string,"notes":string,"files":[{"path":string,"content":string}]}.` + "\n")
+	b.WriteString(`When finished, reply with a single JSON object: {"ok":bool,"summary":string,"notes":string,"files":[{"path":string,"content":string}]}. Set ok=true when the changes are complete; leave "files" empty if you edited the worktree directly.` + "\n")
 	return b.String()
 }

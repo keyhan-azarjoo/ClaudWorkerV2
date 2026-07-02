@@ -158,11 +158,15 @@ func (m *Manager) Get(id string) (*Resource, bool) {
 // Filter narrows a listing/selection. Zero value matches everything.
 type Filter struct {
 	Kind   Kind              // "" = any kind
+	ID     string            // "" = any id; else selects exactly this resource (operator account choice)
 	Labels map[string]string // all must match (subset)
 }
 
 func (f Filter) matches(r *Resource) bool {
 	if f.Kind != "" && r.Kind != f.Kind {
+		return false
+	}
+	if f.ID != "" && r.ID != f.ID {
 		return false
 	}
 	for k, v := range f.Labels {
