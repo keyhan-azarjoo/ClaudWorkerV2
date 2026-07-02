@@ -22,7 +22,7 @@ is implemented in **Go** so no tokens are ever spent on work a program can do.
 | Repo created (`myotgo/ClaudWorkerV2`, private) | ✅ |
 | Architecture docs (`docs/00`–`docs/22` + review) | ✅ complete |
 | Architecture frozen | 🧊 **v2.1.0** (2026-07-02; ACP-0001) |
-| Implementation | ▶️ **S0–S3 complete** (foundations + Git/Jira toolbelt + Assignment Engine + **State Store**) — S4 (Knowledge Brain) next. Reports: [S2](docs/reports/S2_REPORT.md), [S3 persistence](docs/reports/PERSISTENCE_REVIEW_S3.md). |
+| Implementation | ▶️ **S0–S4 complete** (foundations + Git/Jira toolbelt + Assignment Engine + State Store + **Knowledge Brain**) — S5 (Workers) next. Reports: [S2](docs/reports/S2_REPORT.md), [S3 persistence](docs/reports/PERSISTENCE_REVIEW_S3.md), [S4 model](docs/reports/KNOWLEDGE_MODEL_S4.md) · [S4 compliance](docs/reports/ARCH_COMPLIANCE_S4.md) · [S4 prompt-size](docs/reports/PROMPT_SIZE_ANALYSIS_S4.md) · [S4 growth](docs/reports/KNOWLEDGE_GROWTH_REPORT_S4.md) · [S4 simplification](docs/reports/SIMPLIFICATION_REVIEW_S4.md) · [S4 debt](docs/reports/TECHNICAL_DEBT_S4.md). |
 
 ### Build & run (S0–S1)
 
