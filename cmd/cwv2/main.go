@@ -63,6 +63,8 @@ func run(args []string) int {
 		return cmdBackup(args[1:])
 	case "restore":
 		return cmdRestore(args[1:])
+	case "stress":
+		return cmdStress(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return 0
