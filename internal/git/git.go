@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -78,6 +79,14 @@ func (g *Git) run(ctx context.Context, op, dir string, args ...string) (string, 
 
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, g.bin, full...)
+	// NEVER let a network op hang on a credential prompt (headless: no terminal) — fail fast instead
+	// (this is what caused "stuck on merge"). Also abort a transfer that stalls (<1KB/s for 60s).
+	cmd.Env = append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GCM_INTERACTIVE=never",
+		"GIT_HTTP_LOW_SPEED_LIMIT=1000",
+		"GIT_HTTP_LOW_SPEED_TIME=60",
+	)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

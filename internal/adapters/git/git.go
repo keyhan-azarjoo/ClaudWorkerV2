@@ -168,7 +168,12 @@ func NewMerger(a *Adapter) *Merger { return &Merger{a: a} }
 // Merge fetches, merges the assignment branch --no-ff into the integration branch, and best-effort
 // pushes. Returns merged=false on conflict (already aborted).
 func (m *Merger) Merge(ctx context.Context, issue string) (bool, error) {
-	_ = m.a.g.Fetch(ctx, m.a.repo)
+	// Fast-forward the integration branch to origin FIRST so our merge sits on top of the latest and
+	// the push is a fast-forward (otherwise the remote moves ahead and the push is REJECTED, so the
+	// merge never reaches GitHub). Best-effort: if it can't ff (diverged), we still merge locally.
+	if err := m.a.g.Pull(ctx, m.a.repo, m.a.remote, m.a.devBranch); err != nil {
+		_ = m.a.g.Fetch(ctx, m.a.repo)
+	}
 	branch := m.a.BranchFor(issue)
 	mr, err := m.a.g.Merge(ctx, m.a.repo, branch, "Merge "+branch+" ("+issue+")")
 	if err != nil {
