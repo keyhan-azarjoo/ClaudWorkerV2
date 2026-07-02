@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
 	"github.com/myotgo/ClaudWorkerV2/internal/controlplane"
@@ -28,16 +29,24 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 	// --- Select runtime (Policy owns the choice; the engine never names Claude directly) ---
 	runtimeName := o.Policy.RuntimeSelection.Select(policy.Capabilities{}).Runtime
 	o.emit(controlplane.EventRuntimeStarted, "runtime", map[string]any{"issue": iss.Key, "runtime": runtimeName, "resource": resID})
+	o.recordAction(iss.Key, "runtime", "done", resID)
 
 	// --- Load Knowledge Context (deterministic, zero tokens) ---
 	kctx := o.knowledgeContext(iss)
 	o.emit(controlplane.EventKnowledgeUpdated, "knowledge", map[string]any{"issue": iss.Key, "context_bytes": len(kctx)})
+	o.recordAction(iss.Key, "knowledge", "done", fmt.Sprintf("%d bytes", len(kctx)))
 
 	// --- Run Worker (initial develop) ---
 	a.State = assignment.StateDeveloping
 	_ = o.Store.Save(a)
+	o.recordAction(iss.Key, "develop", "running", "")
 	dev, err := o.Developer.Develop(ctx, DevInput{Issue: iss.Key, Summary: iss.Summary, AcceptanceCriteria: iss.AcceptanceCriteria, KnowledgeContext: kctx, Runtime: runtimeName, Account: resID})
 	o.emit(controlplane.EventRuntimeFinished, "runtime", map[string]any{"issue": iss.Key, "ok": err == nil && dev.OK, "changed": len(dev.ChangedFiles)})
+	devStatus := "done"
+	if err != nil || !dev.OK {
+		devStatus = "failed"
+	}
+	o.recordAction(iss.Key, "develop", devStatus, fmt.Sprintf("%d file(s) changed", len(dev.ChangedFiles)))
 
 	// --- Verification + Improvement loop (S8 + S9), stop decided by the Policy Engine (S6) ---
 	a.State = assignment.StateQA
@@ -64,6 +73,7 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 func (o *Orchestrator) mergeAndClose(ctx context.Context, a *assignment.Assignment, iss Issue) error {
 	a.State = assignment.StateMerging
 	_ = o.Store.Save(a)
+	o.recordAction(iss.Key, "merge", "running", "")
 
 	l, granted, _ := o.Leases.Acquire(lease.Request{Kind: lease.KindMerge, Resource: o.Cfg.DevBranch, Owner: iss.Key, Reason: "merge", Renewable: false})
 	if !granted {
@@ -81,6 +91,7 @@ func (o *Orchestrator) mergeAndClose(ctx context.Context, a *assignment.Assignme
 		return o.fail(ctx, a, iss, "merge failed")
 	}
 	o.emit("MergeCompleted", "git", map[string]any{"issue": iss.Key, "branch": o.Cfg.DevBranch})
+	o.recordAction(iss.Key, "merge", "done", o.Cfg.DevBranch)
 
 	if o.Cfg.DoneStatus != "" {
 		_ = o.Jira.Transition(ctx, iss.Key, o.Cfg.DoneStatus)
@@ -148,6 +159,11 @@ func (o *Orchestrator) finish(ctx context.Context, a *assignment.Assignment, iss
 	o.count("processed")
 	o.count(string(state))
 	o.emit(controlplane.EventAssignmentCompleted, "assignment", map[string]any{"issue": iss.Key, "state": string(state), "reason": reason})
+	finStatus := "done"
+	if state != assignment.StateDone {
+		finStatus = "failed"
+	}
+	o.recordAction(iss.Key, "finish", finStatus, reason)
 	return nil
 }
 
@@ -175,8 +191,10 @@ type impVerifier struct {
 
 func (v *impVerifier) Verify(ctx context.Context) ([]verify.Result, error) {
 	v.o.emit(controlplane.EventVerificationStarted, "verify", map[string]any{"issue": v.issue})
+	v.o.recordAction(v.issue, "verify", "running", "")
 	res, err := v.o.Verifier.Verify(ctx, v.issue)
 	v.o.emit(controlplane.EventVerificationFinished, "verify", map[string]any{"issue": v.issue, "outcome": string(verify.Aggregate(res)), "results": len(res)})
+	v.o.recordAction(v.issue, "verify", "done", string(verify.Aggregate(res)))
 	return res, err
 }
 

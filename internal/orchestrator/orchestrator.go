@@ -96,6 +96,23 @@ type Config struct {
 	//                            assignments are also not auto-resumed while idle.
 }
 
+// TaskAction is one entry in a task's activity timeline (a stage transition for the dashboard boxes).
+type TaskAction struct {
+	Stage  string    `json:"stage"`
+	Status string    `json:"status"`
+	Detail string    `json:"detail,omitempty"`
+	At     time.Time `json:"at"`
+}
+
+// TaskActivity is the ordered activity timeline for one issue (newest task first in the query result).
+type TaskActivity struct {
+	Issue     string       `json:"issue"`
+	State     string       `json:"state"`
+	Account   string       `json:"account,omitempty"`
+	StartedAt time.Time    `json:"started_at"`
+	Actions   []TaskAction `json:"actions"`
+}
+
 // Orchestrator wires the subsystems and runs the loop. It holds subsystem INSTANCES (deterministic,
 // in-process) and PORTS for the external edges. It contains no business logic of its own beyond
 // sequencing + event publishing.
@@ -120,6 +137,7 @@ type Orchestrator struct {
 
 	mu        sync.Mutex
 	counters  map[string]int
+	taskLog   map[string]*TaskActivity
 	decisions []map[string]any // policy-decision ring for the Policies page
 	lastIssue string
 	running   bool // the serve loop goroutine is alive
@@ -170,6 +188,7 @@ func New(p *Orchestrator, opts ...Option) *Orchestrator {
 	}
 	p.trigger = make(chan struct{}, 1)
 	p.counters = map[string]int{}
+	p.taskLog = map[string]*TaskActivity{}
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -181,6 +200,14 @@ func (o *Orchestrator) log() *slog.Logger {
 		return o.Log
 	}
 	return slog.New(slog.DiscardHandler)
+}
+
+// clock returns the loop's time source (deterministic in tests; time.Now otherwise).
+func (o *Orchestrator) clock() func() time.Time {
+	if o.now != nil {
+		return o.now
+	}
+	return time.Now
 }
 
 // emit publishes an event to the Control Plane (if wired) and records a counter. Every significant
@@ -207,6 +234,35 @@ func (o *Orchestrator) count(name string) {
 	o.mu.Lock()
 	o.counters[name]++
 	o.mu.Unlock()
+}
+
+// recordAction appends one action to a task's activity timeline (for the dashboard task boxes).
+func (o *Orchestrator) recordAction(issue, stage, status, detail string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.taskLog == nil {
+		o.taskLog = map[string]*TaskActivity{}
+	}
+	t := o.taskLog[issue]
+	if t == nil {
+		// bound growth: if at capacity, drop the oldest task first.
+		if len(o.taskLog) >= 40 {
+			var oldestKey string
+			var oldest time.Time
+			for k, v := range o.taskLog {
+				if oldestKey == "" || v.StartedAt.Before(oldest) {
+					oldestKey, oldest = k, v.StartedAt
+				}
+			}
+			delete(o.taskLog, oldestKey)
+		}
+		t = &TaskActivity{Issue: issue, StartedAt: o.clock()()}
+		o.taskLog[issue] = t
+	}
+	t.Actions = append(t.Actions, TaskAction{Stage: stage, Status: status, Detail: detail, At: o.clock()()})
+	if stage == "runtime" && detail != "" {
+		t.Account = detail
+	}
 }
 
 // Notify wakes the loop (e.g. when new Jira work arrives). Non-blocking → no busy waiting.
@@ -324,6 +380,7 @@ func (o *Orchestrator) claimNext(ctx context.Context) (*assignment.Assignment, I
 		o.lastIssue = iss.Key
 		o.mu.Unlock()
 		o.emit(controlplane.EventAssignmentCreated, "assignment", map[string]any{"issue": iss.Key, "state": string(a.State)})
+		o.recordAction(iss.Key, "claimed", "done", "")
 		return a, iss, true, nil
 	}
 	return nil, Issue{}, false, nil
@@ -373,6 +430,7 @@ func (o *Orchestrator) RunIssue(ctx context.Context, key string) (bool, error) {
 	o.lastIssue = key
 	o.mu.Unlock()
 	o.emit(controlplane.EventAssignmentCreated, "assignment", map[string]any{"issue": key, "state": string(a.State)})
+	o.recordAction(key, "claimed", "done", "")
 	return true, o.runAssignment(ctx, a, iss)
 }
 

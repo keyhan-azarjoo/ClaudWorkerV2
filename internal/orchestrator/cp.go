@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/myotgo/ClaudWorkerV2/internal/resource"
@@ -65,6 +66,25 @@ func (o *Orchestrator) RegisterControlPlane() {
 		out := make([]map[string]any, len(o.decisions))
 		copy(out, o.decisions)
 		return out, nil
+	})
+	// tasks.activity — per-task action timeline for the dashboard task boxes (newest task first). The
+	// live assignment State is read from the Store (the log records the ordered actions, not the state).
+	o.CP.Query("tasks.activity", func(context.Context, url.Values) (any, error) {
+		o.mu.Lock()
+		acts := make([]*TaskActivity, 0, len(o.taskLog))
+		for _, t := range o.taskLog {
+			cp := *t
+			cp.Actions = append([]TaskAction(nil), t.Actions...)
+			acts = append(acts, &cp)
+		}
+		o.mu.Unlock()
+		for _, t := range acts {
+			if a, ok, _ := o.Store.Load(t.Issue); ok {
+				t.State = string(a.State)
+			}
+		}
+		sort.Slice(acts, func(i, j int) bool { return acts[i].StartedAt.After(acts[j].StartedAt) })
+		return acts, nil
 	})
 
 	// --- Commands (actions that delegate to subsystems / the loop) ---
