@@ -22,6 +22,12 @@ repos:
   #   url: https://github.com/keyhan-azarjoo/Flutter-IoT-MobileApp.git
   #   dev_branch: development
   #   plugin: generic
+
+# Worker accounts (V2 runs Claude only). Listing them REPLACES ~/.cw-accounts auto-discovery,
+# so only these known/working accounts are registered (avoids selecting a broken login).
+accounts:
+  - { name: MyOTGO, config_dir: ~/.cw-accounts/myotgo }
+  - { name: SOT-Claud, config_dir: ~/.cw-accounts/sot-claud }
   # - name: website          # build: npm ci && npm run build ; verify: npm run lint && npm test ; web: https://myotgo.com
   #   url: https://github.com/keyhan-azarjoo/NextJs-Myotgo-Website.git
   #   dev_branch: development

@@ -20,6 +20,7 @@ type Config struct {
 	Jira       Jira              `yaml:"jira"`
 	GitHub     GitHub            `yaml:"github"`
 	Repos      []Repo            `yaml:"repos"`
+	Accounts   []Account         `yaml:"accounts"`
 	Component  map[string]string `yaml:"component_map"`
 	Workflow   Workflow          `yaml:"workflow"`
 	Defaults   Defaults          `yaml:"defaults"`
@@ -77,6 +78,15 @@ type Repo struct {
 	DevBranch string   `yaml:"dev_branch"`
 	Plugin    string   `yaml:"plugin"`
 	PathHints []string `yaml:"path_hints"`
+}
+
+// Account is one AI worker account (V1 parity). When accounts are listed here they REPLACE folder
+// auto-discovery, so only these known accounts are registered (no stray ~/.cw-accounts junk).
+type Account struct {
+	Name      string `yaml:"name"`       // display name, e.g. "MyOTGO"
+	ConfigDir string `yaml:"config_dir"` // CLAUDE_CONFIG_DIR for this account (~ is expanded)
+	Engine    string `yaml:"engine"`     // "claude" (default). V2 runs Claude only; other engines are skipped.
+	Model     string `yaml:"model"`      // optional model pin
 }
 
 type Workflow struct {
