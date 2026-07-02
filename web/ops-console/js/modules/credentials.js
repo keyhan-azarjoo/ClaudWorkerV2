@@ -1,9 +1,13 @@
-// credentials.js — the Claude accounts and the secrets the platform can use (parity with V1's panel).
-// Values are masked by default; "Reveal values" refetches with ?reveal=1. Owner-facing, auth-gated.
+// credentials.js — CREDENTIAL HEALTH dashboard. Shows name, source, subsystem, status, validation
+// and last-validated time. It NEVER shows a secret value: there is no reveal, no copy, no masked
+// output. A "Validate" action confirms credentials work (live Jira/GitHub checks) without exposing
+// them. Secret values exist only inside the runtime's resolver.
 import { api } from "api";
 import { el, card, sectionHead, button, badge, table } from "ui";
 
 const healthTone = (h) => ({ healthy: "ok", degraded: "warn", down: "danger" }[h] || "");
+const statusTone = (s) => ({ Resolved: "ok", Missing: "danger", Invalid: "danger" }[s] || "");
+const valTone = (v) => ({ ok: "ok", failed: "danger" }[v] || "");
 
 export default {
   title: "Credentials",
@@ -11,74 +15,77 @@ export default {
     const body = el("div", {}, el("div", { class: "notice" }, "Loading…"));
     outlet.append(
       sectionHead(
-        "Credentials",
-        "Claude accounts and every secret the platform can resolve (as V1). Values are masked — click “Reveal values” to show them."
+        "Credentials — health",
+        "Status of the credentials the platform can resolve. Secret values are never shown, copied or returned by the API — only health."
       ),
       body
     );
 
-    let revealed = false;
+    async function draw(data) {
+      const d = data || {};
+      const accounts = d.accounts || [];
+      const secrets = d.secrets || [];
 
-    async function load() {
-      body.replaceChildren(el("div", { class: "notice" }, "Loading…"));
-      try {
-        const res = await api.query("credentials.snapshot", revealed ? { reveal: "1" } : undefined);
-        const d = (res && res.data) || {};
-        const accounts = d.accounts || [];
-        const secrets = d.secrets || [];
+      const accCard = card(
+        `Claude accounts (${accounts.length})`,
+        table(
+          [
+            { key: "id", label: "Account", mono: true },
+            { key: "model", label: "Model", render: (r) => r.model || "—" },
+            { key: "subsystem", label: "Subsystem" },
+            { key: "health", label: "Health", render: (r) => badge(r.health, healthTone(r.health)) },
+          ],
+          accounts
+        )
+      );
 
-        const accCard = card(
-          `Claude accounts (${accounts.length})`,
-          table(
-            [
-              { key: "id", label: "Account", mono: true },
-              { key: "name", label: "Name" },
-              { key: "model", label: "Model", render: (r) => r.model || "—" },
-              { key: "config_dir", label: "Config dir", mono: true, render: (r) => r.config_dir || "—" },
-              { key: "health", label: "Health", render: (r) => badge(r.health, healthTone(r.health)) },
-            ],
-            accounts
-          )
-        );
+      const validateBtn = button("Validate", {
+        tone: "primary",
+        ico: "refresh",
+        onClick: async () => {
+          validateBtn.textContent = "Validating…";
+          try {
+            const res = await api.command("credentials.validate");
+            await draw(res && res.data);
+          } catch (e) {
+            body.prepend(el("div", { class: "notice danger" }, "Validation failed: " + (e && e.message ? e.message : e)));
+          }
+        },
+      });
 
-        const revealBtn = button(revealed ? "Hide values" : "Reveal values", {
-          tone: revealed ? "" : "primary",
-          ico: revealed ? "lock" : "unlock",
-          onClick: () => {
-            revealed = !revealed;
-            load();
-          },
-        });
-
-        const secCard = card(
-          `Secrets (${secrets.length})`,
+      const secCard = card(
+        `Secrets (${secrets.length})`,
+        el(
+          "div",
+          {},
           el(
             "div",
-            {},
-            el("div", { class: "row", style: "margin-bottom:10px" }, revealBtn, el("span", { class: "sub" }, revealed ? "Showing full values" : "Masked")),
-            table(
-              [
-                { key: "name", label: "Name", mono: true },
-                { key: "present", label: "Status", render: (r) => (r.present ? badge("set", "ok") : badge("missing", "danger")) },
-                {
-                  key: "value",
-                  label: "Value",
-                  mono: true,
-                  render: (r) => el("span", { class: "mono" }, revealed && r.value !== undefined ? r.value : r.masked || "—"),
-                },
-              ],
-              secrets
-            )
+            { class: "row", style: "margin-bottom:10px; align-items:center; gap:10px" },
+            validateBtn,
+            el("span", { class: "sub" }, "Confirms each credential works — no value is ever revealed.")
           ),
-          { sub: revealed ? "revealed" : "masked" }
-        );
+          table(
+            [
+              { key: "name", label: "Name", mono: true },
+              { key: "source", label: "Source" },
+              { key: "subsystem", label: "Used by" },
+              { key: "status", label: "Status", render: (r) => badge(r.status, statusTone(r.status)) },
+              { key: "validation", label: "Validation", render: (r) => (r.validation ? badge(r.validation, valTone(r.validation)) : el("span", { class: "sub" }, "not run")) },
+              { key: "last_validated", label: "Last validated", mono: true, render: (r) => (r.last_validated ? r.last_validated.replace("T", " ").replace("Z", "") : "—") },
+            ],
+            secrets
+          )
+        )
+      );
 
-        body.replaceChildren(accCard, secCard);
-      } catch (e) {
-        body.replaceChildren(el("div", { class: "notice danger" }, "Failed to load credentials: " + (e && e.message ? e.message : e)));
-      }
+      body.replaceChildren(accCard, secCard);
     }
 
-    load();
+    try {
+      const res = await api.query("credentials.health");
+      await draw(res && res.data);
+    } catch (e) {
+      body.replaceChildren(el("div", { class: "notice danger" }, "Failed to load credential health: " + (e && e.message ? e.message : e)));
+    }
   },
 };
