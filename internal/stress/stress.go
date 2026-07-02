@@ -80,15 +80,7 @@ func issues(n int) []orchestrator.Issue {
 }
 
 func indexOf(issue string) int {
-	n := 0
-	for i := len(issue) - 1; i >= 0; i-- {
-		if issue[i] < '0' || issue[i] > '9' {
-			break
-		}
-	}
-	// parse trailing number
-	num := 0
-	mult := 1
+	num, mult := 0, 1
 	for i := len(issue) - 1; i >= 0; i-- {
 		if issue[i] < '0' || issue[i] > '9' {
 			break
@@ -96,7 +88,6 @@ func indexOf(issue string) int {
 		num += int(issue[i]-'0') * mult
 		mult *= 10
 	}
-	_ = n
 	return num
 }
 

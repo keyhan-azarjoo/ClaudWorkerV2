@@ -18,25 +18,9 @@ type Adapter struct {
 	maxResults int
 }
 
-// Option configures the Adapter.
-type Option func(*Adapter)
-
-// WithMaxResults caps how many eligible issues are fetched per poll (default 25).
-func WithMaxResults(n int) Option {
-	return func(a *Adapter) {
-		if n > 0 {
-			a.maxResults = n
-		}
-	}
-}
-
-// New builds the adapter from a Jira client and the work-queue JQL.
-func New(c *jira.Client, workJQL string, opts ...Option) *Adapter {
-	a := &Adapter{c: c, workJQL: workJQL, maxResults: 25}
-	for _, o := range opts {
-		o(a)
-	}
-	return a
+// New builds the adapter from a Jira client and the work-queue JQL (25 eligible issues per poll).
+func New(c *jira.Client, workJQL string) *Adapter {
+	return &Adapter{c: c, workJQL: workJQL, maxResults: 25}
 }
 
 // Eligible runs the work-queue JQL and returns each issue enriched with its acceptance criteria (what

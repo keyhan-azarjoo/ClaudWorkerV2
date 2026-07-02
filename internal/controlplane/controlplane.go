@@ -60,15 +60,6 @@ type BusOption func(*Bus)
 // WithClock overrides the time source (deterministic events in tests).
 func WithClock(now func() time.Time) BusOption { return func(b *Bus) { b.now = now } }
 
-// WithRingCapacity sets how many recent events are retained for replay (default 256).
-func WithRingCapacity(n int) BusOption {
-	return func(b *Bus) {
-		if n > 0 {
-			b.ringCap = n
-		}
-	}
-}
-
 // NewBus returns an empty Bus.
 func NewBus(opts ...BusOption) *Bus {
 	b := &Bus{subs: map[int]chan Event{}, ringCap: 256, now: time.Now}
