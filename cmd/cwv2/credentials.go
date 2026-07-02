@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -185,6 +186,33 @@ func (c *credHealth) validateJira(ctx context.Context) (bool, string) {
 		return false, "authentication failed"
 	}
 	return true, "authenticated"
+}
+
+// taskAgentCounts returns, per issue key, how many worker/subagent processes (claude or codex) are
+// currently running in that task's worktree — the LIVE "agents working on this task" number for the
+// dashboard boxes. It reads process working directories via lsof and matches ".../worktrees/<repo>/
+// <ISSUE>". Best-effort: returns an empty map if lsof is unavailable.
+func taskAgentCounts() map[string]int {
+	counts := map[string]int{}
+	out, err := exec.Command("lsof", "-a", "-c", "claude", "-c", "codex", "-d", "cwd", "-Fn").Output()
+	if err != nil {
+		return counts
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(line, "n") {
+			continue
+		}
+		p := line[1:]
+		i := strings.Index(p, "/worktrees/")
+		if i < 0 {
+			continue
+		}
+		parts := strings.Split(p[i+len("/worktrees/"):], "/")
+		if len(parts) >= 2 && parts[1] != "" { // parts[0]=repo, parts[1]=issue key
+			counts[parts[1]]++
+		}
+	}
+	return counts
 }
 
 // projectKeyFromJQL extracts the project key from a `project = KEY ...` JQL, defaulting to SCRUM.
