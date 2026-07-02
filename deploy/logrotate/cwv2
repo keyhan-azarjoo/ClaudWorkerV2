@@ -1,0 +1,9 @@
+/var/log/cwv2/*.log /usr/local/var/log/cwv2/*.log {
+  daily
+  rotate 14
+  compress
+  delaycompress
+  missingok
+  notifempty
+  copytruncate
+}

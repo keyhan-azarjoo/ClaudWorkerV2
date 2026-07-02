@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.myotgo.cwv2</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/cwv2</string><string>serve</string>
+    <string>--config</string><string>/usr/local/etc/cwv2/cwv2.yaml</string>
+    <string>--mode</string><string>live</string>
+    <string>--bind</string><string>127.0.0.1:8080</string>
+    <string>--web</string><string>/usr/local/share/cwv2/web/ops-console</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>                 <!-- automatic recovery on crash -->
+  <key>StandardOutPath</key><string>/usr/local/var/log/cwv2/cwv2.log</string>
+  <key>StandardErrorPath</key><string>/usr/local/var/log/cwv2/cwv2.err</string>
+  <key>ExitTimeOut</key><integer>30</integer> <!-- graceful shutdown window -->
+</dict></plist>
