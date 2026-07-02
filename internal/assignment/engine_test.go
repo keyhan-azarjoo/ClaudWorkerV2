@@ -37,10 +37,10 @@ func (f *fakeWorker) Run(ctx context.Context, in WorkerInput) (WorkerResult, err
 func mockJira(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/rest/api/3/search", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /rest/api/3/search/jql", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(jira.SearchResult{
-			Total:  1,
 			Issues: []jira.Issue{{Key: "SCRUM-1", Fields: jira.IssueFields{Summary: "Add hello file"}}},
+			IsLast: true,
 		})
 	})
 	mux.HandleFunc("/rest/api/3/issue/SCRUM-1/transitions", func(w http.ResponseWriter, r *http.Request) {

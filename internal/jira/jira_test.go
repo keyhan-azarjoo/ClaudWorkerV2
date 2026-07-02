@@ -28,15 +28,26 @@ func mockJira(t *testing.T) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(Myself{AccountID: "a1", EmailAddress: "me@x.com", DisplayName: "Me"})
 	})
 
-	mux.HandleFunc("/rest/api/3/search", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("jql") == "" {
+	// Legacy GET /rest/api/3/search was removed by Atlassian (CHANGE-2046). If the client ever
+	// regresses to it, answer 410 like the real API so the regression test below fails loudly.
+	mux.HandleFunc("GET /rest/api/3/search", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(410)
+		_, _ = io.WriteString(w, `{"errorMessages":["The requested API has been removed. Please migrate to /rest/api/3/search/jql"]}`)
+	})
+
+	// Current bounded endpoint: POST /rest/api/3/search/jql with a JSON body.
+	mux.HandleFunc("POST /rest/api/3/search/jql", func(w http.ResponseWriter, r *http.Request) {
+		var body searchJQLRequest
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.JQL == "" {
 			w.WriteHeader(400)
 			_, _ = io.WriteString(w, `{"errorMessages":["jql required"]}`)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(SearchResult{
-			Total:  1,
-			Issues: []Issue{{Key: "SCRUM-1", Fields: IssueFields{Summary: "Do a thing", Labels: []string{"engine"}}}},
+			Issues:        []Issue{{Key: "SCRUM-1", Fields: IssueFields{Summary: "Do a thing", Labels: []string{"engine"}}}},
+			IsLast:        true,
+			NextPageToken: "",
 		})
 	})
 
@@ -142,7 +153,37 @@ func TestSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if res.Total != 1 || len(res.Issues) != 1 || res.Issues[0].Key != "SCRUM-1" {
+	if len(res.Issues) != 1 || res.Issues[0].Key != "SCRUM-1" {
+		t.Errorf("unexpected result: %+v", res)
+	}
+}
+
+// TestSearchUsesJQLEndpoint is a regression guard for CHANGE-2046: the legacy GET /rest/api/3/search
+// endpoint was removed by Atlassian and now returns HTTP 410. The mock answers 410 on that path, so
+// if Search ever regresses to it this test fails with an http-410 error instead of a clean result.
+func TestSearchUsesJQLEndpoint(t *testing.T) {
+	var hitPath, hitMethod string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitPath, hitMethod = r.URL.Path, r.Method
+		if r.Method == http.MethodGet && r.URL.Path == "/rest/api/3/search" {
+			w.WriteHeader(410)
+			_, _ = io.WriteString(w, `{"errorMessages":["removed; migrate to /rest/api/3/search/jql"]}`)
+			return
+		}
+		var body searchJQLRequest
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewEncoder(w).Encode(SearchResult{Issues: []Issue{{Key: "SCRUM-9"}}, IsLast: true})
+	}))
+	defer srv.Close()
+	c := newTestClient(t, srv.URL)
+	res, err := c.Search(context.Background(), "project = SCRUM AND labels = ready", nil, 25)
+	if err != nil {
+		t.Fatalf("Search must use the bounded /search/jql endpoint, got: %v", err)
+	}
+	if hitMethod != http.MethodPost || hitPath != "/rest/api/3/search/jql" {
+		t.Fatalf("Search hit %s %s, want POST /rest/api/3/search/jql", hitMethod, hitPath)
+	}
+	if len(res.Issues) != 1 || res.Issues[0].Key != "SCRUM-9" {
 		t.Errorf("unexpected result: %+v", res)
 	}
 }
