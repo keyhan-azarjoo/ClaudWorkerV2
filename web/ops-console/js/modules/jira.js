@@ -50,9 +50,13 @@ export default {
         ]);
         const stateByIssue = {};
         (tasks || []).forEach((t) => (stateByIssue[t.issue] = t.state));
-        const accounts = (resources || []).filter((r) => r.kind === "claude_account");
+        // Only accounts that can actually run are selectable — a PAUSED (or offline) account must not
+        // be pickable for a Run.
+        const accounts = (resources || []).filter(
+          (r) => r.kind === "claude_account" && r.availability !== "paused" && r.availability !== "offline"
+        );
 
-        // A Run control: account picker (Auto + each account) + Run button.
+        // A Run control: account picker (Auto + each selectable account) + Run button.
         const runControl = (issueKey) => {
           const sel = el("select", { class: "acct-select" }, el("option", { value: "" }, "Auto"));
           accounts.forEach((a) => {
