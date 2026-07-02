@@ -28,10 +28,12 @@ func NewFileStore(dir string) (*FileStore, error) {
 
 func (s *FileStore) path(issueKey string) string { return filepath.Join(s.dir, issueKey+".json") }
 
-// Save atomically writes the minimal record (temp + fsync + rename).
+// Save atomically writes the minimal record (temp + fsync + rename), stamping the current format
+// version so future engines can migrate it.
 func (s *FileStore) Save(a *Assignment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	a.SpecVersion = StateVersion
 	b, err := json.MarshalIndent(a, "", "  ")
 	if err != nil {
 		return err
@@ -69,6 +71,10 @@ func (s *FileStore) Load(issueKey string) (*Assignment, bool, error) {
 	}
 	var a Assignment
 	if err := json.Unmarshal(b, &a); err != nil {
+		return nil, false, err
+	}
+	// Validate + deterministically migrate the stored format version (never silently ignored).
+	if err := migrate(&a); err != nil {
 		return nil, false, err
 	}
 	return &a, true, nil
@@ -112,6 +118,7 @@ func NewMemoryStore() *MemoryStore { return &MemoryStore{m: map[string]Assignmen
 func (s *MemoryStore) Save(a *Assignment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	a.SpecVersion = StateVersion
 	s.m[a.IssueKey] = *a // store a copy so callers can't mutate persisted state by reference
 	return nil
 }

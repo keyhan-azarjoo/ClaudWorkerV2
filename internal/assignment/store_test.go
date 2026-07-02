@@ -27,7 +27,8 @@ func TestPersistedRecordIsMinimal(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]bool{"issue_key": true, "state": true, "attempt": true}
+	// 3 execution-state fields + 1 sanctioned format-metadata field (spec_version).
+	want := map[string]bool{"issue_key": true, "state": true, "attempt": true, "spec_version": true}
 	if len(m) != len(want) {
 		t.Fatalf("persisted %d fields %v, want exactly %v", len(m), keys(m), want)
 	}
@@ -35,6 +36,44 @@ func TestPersistedRecordIsMinimal(t *testing.T) {
 		if !want[k] {
 			t.Errorf("unexpected persisted field %q (add justification to PERSISTENCE_REVIEW_S3.md)", k)
 		}
+	}
+	if v, _ := m["spec_version"].(float64); int(v) != StateVersion {
+		t.Errorf("spec_version = %v, want %d", m["spec_version"], StateVersion)
+	}
+}
+
+func TestMigrateLegacyRecordStamped(t *testing.T) {
+	dir := t.TempDir()
+	// a pre-versioning record on disk (no spec_version field)
+	if err := os.WriteFile(filepath.Join(dir, "K.json"),
+		[]byte(`{"issue_key":"K","state":"developing","attempt":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := NewFileStore(dir)
+	a, ok, err := s.Load("K")
+	if err != nil || !ok {
+		t.Fatalf("Load legacy: ok=%v err=%v", ok, err)
+	}
+	if a.SpecVersion != StateVersion {
+		t.Errorf("legacy record migrated to v%d, want v%d", a.SpecVersion, StateVersion)
+	}
+	if a.State != StateDeveloping || a.Attempt != 1 {
+		t.Errorf("migration altered execution state: %+v", a)
+	}
+}
+
+func TestRejectNewerFormat(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "K.json"),
+		[]byte(`{"issue_key":"K","state":"claimed","attempt":0,"spec_version":999}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := NewFileStore(dir)
+	if _, _, err := s.Load("K"); err == nil {
+		t.Error("Load must reject a newer format version, not silently ignore it")
+	}
+	if _, err := s.List(); err == nil {
+		t.Error("List must surface the newer-format error")
 	}
 }
 

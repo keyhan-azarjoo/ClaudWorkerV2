@@ -10,19 +10,34 @@ implementation.
 For each field once held on the S2 `Assignment`, the question **"Can this be recomputed?"** was asked.
 Only fields that would **otherwise be lost** survive.
 
-### ✅ Persisted (3 fields) — each with its justification
+### ✅ Persisted (3 execution-state fields + 1 format-metadata field) — each justified
 
-| Field | Why it CANNOT be regenerated | Removable in future? | Restart dependency |
-|---|---|---|---|
-| `issue_key` | Identifies **which in-flight execution** this is. Jira knows the issue *exists*, but not that *this engine* is mid-execution on it (a human could also set an issue In Progress). The identity of an in-flight execution is not derivable from Git/Jira. | No — it is the record's identity. | **Critical**: without it, resume cannot know which issues are in flight. |
-| `state` | The lifecycle checkpoint (Claimed/Developing/QA/Merging/…). Nothing in Git or Jira records "we are at QA vs Merging". | No — it is the resume point. | **Critical**: resume continues from this exact state. |
-| `attempt` | The retry counter. Not present in Git or Jira. Required to enforce the bounded-retry cap **across** a restart. | No — dropping it would let a crash-loop retry forever. | **High**: preserves the retry budget across restarts (else a restart resets retries). |
+| Field | Kind | Why it CANNOT be regenerated | Removable in future? | Restart dependency |
+|---|---|---|---|---|
+| `issue_key` | execution state | Identifies **which in-flight execution** this is. Jira knows the issue *exists*, but not that *this engine* is mid-execution on it (a human could also set an issue In Progress). Not derivable from Git/Jira. | No — it is the record's identity. | **Critical**: without it, resume cannot know which issues are in flight. |
+| `state` | execution state | The lifecycle checkpoint (Claimed/Developing/QA/Merging/…). Nothing in Git or Jira records "we are at QA vs Merging". | No — it is the resume point. | **Critical**: resume continues from this exact state. |
+| `attempt` | execution state | The retry counter. Not present in Git or Jira. Enforces the bounded-retry cap **across** a restart. | No — dropping it would let a crash-loop retry forever. | **High**: preserves the retry budget across restarts. |
+| `spec_version` | **format metadata** (not execution state) | Records the **layout version** of the persisted record so a future engine can migrate old records **deterministically**. It describes the format, not the work; it cannot be inferred from Git/Jira after a format change. | No — it is the compatibility anchor for migration. | **Format gate**: recovery validates it; a newer/unknown version aborts resume with an error (never silently ignored). |
 
-On-disk record (proven by `TestPersistedRecordIsMinimal`, which fails if a field is ever added):
+On-disk record (proven by `TestPersistedRecordIsMinimal`, which fails if any other field is added):
 
 ```json
-{ "issue_key": "SCRUM-1", "state": "merging", "attempt": 2 }
+{ "issue_key": "SCRUM-1", "state": "merging", "attempt": 2, "spec_version": 1 }
 ```
+
+### Format versioning & migration (spec_version)
+
+- `StateVersion = 1` is the current record-format version. The Store **stamps** it on every `Save`.
+- On load, `migrate()` runs deterministically:
+  - `== StateVersion` → ok;
+  - `== 0` (pre-versioning record) → upgrade to v1 (identical fields, just stamped);
+  - `> StateVersion` (written by a newer engine) → **error** (refuse to guess);
+  - unknown older → **error** (no migration path).
+- **Recovery validates it:** `Resume` → `Store.List` loads each record through `migrate()`, so a
+  version mismatch surfaces as a recovery error — it is **never silently ignored** (Law: deterministic
+  migration or explicit failure).
+- Tests: `TestMigrateLegacyRecordStamped` (0→1, execution state untouched), `TestRejectNewerFormat`
+  (v999 → Load/List error), `TestResumeRejectsNewerFormat` (engine recovery aborts on v999).
 
 ### ❌ NOT persisted — recomputable or unneeded-for-recovery (removed in S3)
 
@@ -38,7 +53,7 @@ On-disk record (proven by `TestPersistedRecordIsMinimal`, which fails if a field
 | `created_at` / `updated_at` | Timing/metrics, not required to recover execution. | (metrics, if ever needed, from the event log — not the state store) |
 | `id` (== issue_key) | Redundant with `issue_key`. | — (removed duplication) |
 
-Net: **12 fields → 3.** The persisted footprint dropped to the irreducible minimum.
+Net: **12 fields → 4** (3 execution state + 1 format-metadata). The execution footprint is the irreducible minimum; `spec_version` is the single sanctioned metadata field for long-term migration.
 
 ## The Store interface (storage-agnostic)
 
@@ -63,7 +78,7 @@ type Store interface {
 
 ## Estimated storage growth
 
-- **Per Assignment:** ~60 bytes of JSON (`{issue_key,state,attempt}` + indentation). One file per
+- **Per Assignment:** ~80 bytes of JSON (`{issue_key,state,attempt,spec_version}` + indentation). One file per
   issue.
 - **Terminal records:** an issue reaches `done`/`failed` and its ~60-byte record remains as the
   "already processed, do not redo" marker (also enforced at claim time). Growth is therefore
@@ -76,10 +91,11 @@ type Store interface {
 
 ## Restart dependency summary
 
-Recovery needs, and only needs, the 3 persisted fields:
+Recovery needs, and only needs, the persisted record:
 1. `issue_key` → which issues are in flight (from `List`, filtered to non-terminal).
 2. `state` → where to resume each.
 3. `attempt` → remaining retry budget.
+4. `spec_version` → format-compat gate (migrate or fail; never silently ignore).
 
 Everything else is recomputed (`branch`, `worktree`) or re-fetched (`summary`, `acceptance_criteria`)
 during `drive`. `TestRestartResumeFromDisk` proves this end-to-end: a **new `FileStore` over the same
@@ -89,13 +105,13 @@ re-running** the completed development step (Law 19), using only the persisted r
 ## Verification
 
 - `go vet` clean · `gofmt` clean · `go test -race ./...` all 9 packages pass.
-- `TestPersistedRecordIsMinimal` — on-disk record has exactly `{issue_key,state,attempt}` (guard
+- `TestPersistedRecordIsMinimal` — on-disk record has exactly `{issue_key,state,attempt,spec_version}` (guard
   against future persistence creep).
 - Store tests run against **both** `FileStore` and `MemoryStore` (interface parity).
-- `internal/assignment` coverage 68.5%.
+- `internal/assignment` coverage ~70%.
 
 ## Verdict
 
-The persistent state is the smallest possible: **3 fields**, each provably non-regenerable and
+The persistent state is the smallest possible: **3 execution-state fields** (each provably non-regenerable) plus **1 format-metadata field** (`spec_version`) for deterministic migration —
 required for restart. The engine is fully decoupled from storage behind a 3-method interface with two
 implementations. Recommend **stop for review** before S4.

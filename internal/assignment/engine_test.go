@@ -199,6 +199,26 @@ func TestFailAfterMaxAttempts(t *testing.T) {
 	}
 }
 
+// TestResumeRejectsNewerFormat proves recovery does not silently ignore a version mismatch: a record
+// written by a newer state format aborts Resume with an error.
+func TestResumeRejectsNewerFormat(t *testing.T) {
+	ctx := context.Background()
+	g, repo := setupGit(t)
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SCRUM-9.json"),
+		[]byte(`{"issue_key":"SCRUM-9","state":"developing","attempt":0,"spec_version":999}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, _ := NewFileStore(dir)
+	e := newEngine(t, g, repo, &fakeWorker{results: []WorkerResult{{OK: true}}}, store, 3)
+	if _, err := e.Resume(ctx); err == nil {
+		t.Error("Resume must fail on a newer state format, not silently ignore it")
+	}
+}
+
 // TestRestartResumeFromDisk proves Law 19 against real durable storage: a brand-new FileStore over
 // the same directory (a genuine reload from disk) resumes an unfinished Assignment to Done without
 // re-running completed work — using ONLY the persisted {issue,state,attempt} plus recomputed paths.
