@@ -171,3 +171,10 @@ table.tbl td.mono, table.tbl td .mono { font-family: var(--mono); font-size: 12p
   .menu-toggle { display: inline-flex !important; }
 }
 .menu-toggle { display: none; }
+
+/* Manual Start/Stop work control (idle-by-default) */
+.workctl { display: inline-flex; align-items: center; gap: 10px; }
+.workstate { font-size: 12.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border-strong); }
+.workstate.on { color: #fff; background: var(--ok, #1a7f45); border-color: transparent; }
+.workstate.off { color: var(--muted, #888); }
+.btn.danger { background: var(--danger, #b3261e); border-color: var(--danger, #b3261e); color: #fff; }

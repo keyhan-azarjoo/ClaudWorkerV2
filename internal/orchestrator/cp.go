@@ -43,6 +43,16 @@ func (o *Orchestrator) RegisterControlPlane() {
 	})
 
 	// --- Commands (actions that delegate to subsystems / the loop) ---
+	// orchestrator.start / .stop drive the manual "Start Working" / "Stop" buttons: start makes the
+	// loop claim + process the Jira queue until empty, stop returns it to attached-but-idle.
+	o.CP.Command("orchestrator.start", func(context.Context, []byte) (any, error) {
+		o.SetActive(true)
+		return map[string]any{"active": true}, nil
+	})
+	o.CP.Command("orchestrator.stop", func(context.Context, []byte) (any, error) {
+		o.SetActive(false)
+		return map[string]any{"active": false}, nil
+	})
 	o.CP.Command("orchestrator.tick", func(ctx context.Context, _ []byte) (any, error) {
 		did, err := o.ProcessOnce(ctx)
 		return map[string]any{"processed": did}, err
@@ -56,7 +66,11 @@ func (o *Orchestrator) RegisterControlPlane() {
 	o.CP.Status("orchestrator", func(context.Context) (any, error) {
 		o.mu.Lock()
 		defer o.mu.Unlock()
-		return map[string]any{"running": o.running, "last_issue": o.lastIssue}, nil
+		state := "idle"
+		if o.active {
+			state = "working"
+		}
+		return map[string]any{"running": o.running, "active": o.active, "state": state, "last_issue": o.lastIssue}, nil
 	})
 
 	// --- Metrics ---
