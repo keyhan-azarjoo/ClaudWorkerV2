@@ -75,6 +75,9 @@ func (e *Engine) ClaimAndRun(ctx context.Context, workJQL string, maxResults int
 // Resume re-drives every unfinished Assignment after a restart. Completed work is never redone
 // (Law 19): terminal Assignments are ignored; each other resumes at its last stable state, with
 // branch/worktree/summary recomputed (not loaded from storage — they were never stored).
+//
+// Recovery validates the persisted format version: List loads each record through migrate(), so a
+// newer/unknown state format surfaces here as an error rather than being silently ignored.
 func (e *Engine) Resume(ctx context.Context) ([]*Assignment, error) {
 	all, err := e.Store.List()
 	if err != nil {
