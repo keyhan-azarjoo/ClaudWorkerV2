@@ -75,15 +75,20 @@ function taskBox(t, agentCount) {
 function openTaskDrawer(issue) {
   const logEl = el("div", { class: "drawer-log" }, el("div", { class: "sub" }, "Waiting for agent output…"));
   const closeBtn = el("button", { class: "btn" }, "✕ Close");
-  // Continue: retry/resume the task after a transient error (rate limit / API error). Sends the task
-  // back to a fresh, non-cooled account.
+  // Optional message to the agent, sent with Continue (e.g. "the merge conflicted, rebase onto origin
+  // and retry" or extra guidance).
+  const msgInput = el("input", { class: "drawer-msg", type: "text", placeholder: "Optional message to the agent (sent on Continue)…" });
+  // Continue: retry/resume the task after a transient error (rate limit / API / merge error). Sends the
+  // task — plus your message — to a fresh, non-cooled account.
   const continueBtn = el("button", { class: "btn primary" }, "▶ Continue");
   continueBtn.onclick = async () => {
+    const message = msgInput.value.trim();
     continueBtn.textContent = "Continuing…";
     continueBtn.disabled = true;
     try {
-      await api.command("orchestrator.continue", { issue });
-      logEl.append(el("div", { class: "drawer-line", style: "color:var(--ok,#3fb950)" }, "▶ continue sent — the agent is resuming on an available account…"));
+      await api.command("orchestrator.continue", { issue, message });
+      logEl.append(el("div", { class: "drawer-line", style: "color:var(--ok,#3fb950)" }, "▶ continue sent" + (message ? " with your message" : "") + " — the agent is resuming on an available account…"));
+      msgInput.value = "";
     } catch (e) {
       logEl.append(el("div", { class: "drawer-line", style: "color:var(--danger,#f85149)" }, "Continue failed: " + (e && e.message ? e.message : e)));
     }
@@ -92,14 +97,18 @@ function openTaskDrawer(issue) {
       continueBtn.disabled = false;
     }, 2500);
   };
+  msgInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") continueBtn.click();
+  });
   const overlay = el(
     "div",
     { class: "drawer-overlay" },
     el(
       "div",
       { class: "drawer" },
-      el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent output"), el("span", { class: "drawer-actions" }, continueBtn, closeBtn)),
-      logEl
+      el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent output"), closeBtn),
+      logEl,
+      el("div", { class: "drawer-foot" }, msgInput, continueBtn)
     )
   );
   let stopped = false;

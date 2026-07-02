@@ -127,6 +127,14 @@ func (g *Git) Fetch(ctx context.Context, repo string) error {
 	return err
 }
 
+// Reset hard-resets repo's current branch to ref (e.g. "origin/development"), discarding any local
+// commits/changes. Used to rebase the integration branch onto the LATEST remote before a merge so the
+// merge+push is clean even when other agents pushed concurrently.
+func (g *Git) Reset(ctx context.Context, repo, ref string) error {
+	_, err := g.run(ctx, "reset", repo, "reset", "--hard", ref)
+	return err
+}
+
 // Pull fetches and FAST-FORWARDS repo's current branch to remote/branch. It is ff-only (G-2): if the
 // branch has diverged it does NOT create a merge commit — it returns an error so the caller resolves
 // deliberately, keeping the tree clean and restart-safe. (Added for Phase 2.2; required Git capability.)

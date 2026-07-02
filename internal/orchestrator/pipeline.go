@@ -17,7 +17,7 @@ import (
 
 // runAssignment drives one claimed Assignment through the full pipeline, calling each subsystem in
 // turn. Resource usage is always Policy → Resource → Lease. Every transition publishes an event.
-func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignment, iss Issue, preferredAccount string) error {
+func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignment, iss Issue, preferredAccount, operatorNote string) error {
 	owner := a.IssueKey
 
 	// Double-launch guard: never run the SAME issue concurrently (e.g. two Run clicks / a manual Run
@@ -59,7 +59,7 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 	a.State = assignment.StateDeveloping
 	_ = o.Store.Save(a)
 	o.recordAction(iss.Key, "develop", "running", "")
-	dev, err := o.Developer.Develop(ctx, DevInput{Issue: iss.Key, Summary: iss.Summary, AcceptanceCriteria: iss.AcceptanceCriteria, KnowledgeContext: kctx, Runtime: runtimeName, Account: resID})
+	dev, err := o.Developer.Develop(ctx, DevInput{Issue: iss.Key, Summary: iss.Summary, AcceptanceCriteria: iss.AcceptanceCriteria, KnowledgeContext: kctx, Runtime: runtimeName, Account: resID, OperatorNote: operatorNote})
 	o.emit(controlplane.EventRuntimeFinished, "runtime", map[string]any{"issue": iss.Key, "ok": err == nil && dev.OK, "changed": len(dev.ChangedFiles)})
 	// Only a real execution ERROR is a failure (red X). A worker that ran fine but produced no changes
 	// (nothing to do / already satisfied) is NOT a failure — that was showing a misleading red X.
@@ -76,7 +76,7 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 	// --- Verification + Improvement loop (S8 + S9), stop decided by the Policy Engine (S6) ---
 	a.State = assignment.StateQA
 	_ = o.Store.Save(a)
-	imp := o.buildImprovement(iss, kctx, runtimeName, resID)
+	imp := o.buildImprovement(iss, kctx, runtimeName, resID, operatorNote)
 	res, _ := imp.Run(ctx, improvement.ImprovementInput{Assignment: iss.Key, KnowledgeContext: kctx})
 	o.emit(controlplane.EventPolicyDecision, "policy", map[string]any{"policy": "improvement", "decision": string(res.Status), "reason": "improvement loop terminal", "iterations": res.Progress.Iterations})
 
@@ -235,15 +235,16 @@ func (v *impVerifier) Verify(ctx context.Context) ([]verify.Result, error) {
 }
 
 type impImprover struct {
-	o       *Orchestrator
-	iss     Issue
-	kctx    string
-	runtime string
-	account string
+	o            *Orchestrator
+	iss          Issue
+	kctx         string
+	runtime      string
+	account      string
+	operatorNote string
 }
 
 func (im *impImprover) Improve(ctx context.Context, in improvement.ImprovementInput) (improvement.Change, error) {
-	dev, err := im.o.Developer.Develop(ctx, DevInput{Issue: im.iss.Key, Summary: im.iss.Summary, AcceptanceCriteria: im.iss.AcceptanceCriteria, KnowledgeContext: im.kctx, Runtime: im.runtime, Account: im.account})
+	dev, err := im.o.Developer.Develop(ctx, DevInput{Issue: im.iss.Key, Summary: im.iss.Summary, AcceptanceCriteria: im.iss.AcceptanceCriteria, KnowledgeContext: im.kctx, Runtime: im.runtime, Account: im.account, OperatorNote: im.operatorNote})
 	if err != nil {
 		return improvement.Change{}, err
 	}
