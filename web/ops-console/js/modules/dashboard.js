@@ -17,13 +17,30 @@ function taskBox(t, agentCount) {
   let running = null;
   for (const a of actions) if (a && a.status === "running") running = a;
 
+  // A failed task gets a Continue button right on the box (retry on a fresh account after an error).
+  let continueBtn = null;
+  if (t.state === "failed") {
+    continueBtn = el("button", { class: "btn primary task-continue" }, "▶ Continue");
+    continueBtn.onclick = async (e) => {
+      e.stopPropagation(); // don't open the drawer
+      continueBtn.textContent = "…";
+      continueBtn.disabled = true;
+      try {
+        await api.command("orchestrator.continue", { issue: t.issue });
+      } catch (err) {
+        /* shown in drawer if opened */
+      }
+    };
+  }
+
   const head = el(
     "div",
     { class: "task-box-head" },
     el("span", { class: "task-issue mono" }, t.issue || "—"),
     badge(t.state || "—", stateTone(t.state)),
     agentCount > 0 ? el("span", { class: "task-agents" }, "⚡ " + agentCount + " agent" + (agentCount === 1 ? "" : "s")) : null,
-    t.account ? el("span", { class: "task-acct" }, "on " + t.account) : null
+    t.account ? el("span", { class: "task-acct" }, "on " + t.account) : null,
+    continueBtn
   );
 
   const nowLine = running ? el("div", { class: "task-now running" }, "▶ now: " + (running.stage || "—")) : null;
@@ -58,13 +75,30 @@ function taskBox(t, agentCount) {
 function openTaskDrawer(issue) {
   const logEl = el("div", { class: "drawer-log" }, el("div", { class: "sub" }, "Waiting for agent output…"));
   const closeBtn = el("button", { class: "btn" }, "✕ Close");
+  // Continue: retry/resume the task after a transient error (rate limit / API error). Sends the task
+  // back to a fresh, non-cooled account.
+  const continueBtn = el("button", { class: "btn primary" }, "▶ Continue");
+  continueBtn.onclick = async () => {
+    continueBtn.textContent = "Continuing…";
+    continueBtn.disabled = true;
+    try {
+      await api.command("orchestrator.continue", { issue });
+      logEl.append(el("div", { class: "drawer-line", style: "color:var(--ok,#3fb950)" }, "▶ continue sent — the agent is resuming on an available account…"));
+    } catch (e) {
+      logEl.append(el("div", { class: "drawer-line", style: "color:var(--danger,#f85149)" }, "Continue failed: " + (e && e.message ? e.message : e)));
+    }
+    setTimeout(() => {
+      continueBtn.textContent = "▶ Continue";
+      continueBtn.disabled = false;
+    }, 2500);
+  };
   const overlay = el(
     "div",
     { class: "drawer-overlay" },
     el(
       "div",
       { class: "drawer" },
-      el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent output"), closeBtn),
+      el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent output"), el("span", { class: "drawer-actions" }, continueBtn, closeBtn)),
       logEl
     )
   );
@@ -78,8 +112,9 @@ function openTaskDrawer(issue) {
     try {
       const res = await api.query("task.stream", { issue });
       const lines = (res && res.lines) || [];
+      const isErr = (l) => /error|rate limit|limiting requests|overloaded|429|quota|usage limit|failed/i.test(l);
       logEl.replaceChildren(
-        ...(lines.length ? lines.map((l) => el("div", { class: "drawer-line" }, l)) : [el("div", { class: "sub" }, "No agent output yet — the task may be starting.")])
+        ...(lines.length ? lines.map((l) => el("div", { class: "drawer-line" + (isErr(l) ? " err" : "") }, l)) : [el("div", { class: "sub" }, "No agent output yet — the task may be starting.")])
       );
       if (atBottom) logEl.scrollTop = logEl.scrollHeight;
     } catch (e) {

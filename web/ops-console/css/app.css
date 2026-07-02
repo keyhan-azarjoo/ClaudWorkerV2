@@ -245,3 +245,8 @@ html, body { max-width: 100%; overflow-x: hidden; }         /* never scroll the 
   table.tbl th, table.tbl td { padding: 9px 10px; }
   .kpi { padding: 12px; }
 }
+
+/* Continue button + error lines in the agent drawer */
+.drawer-actions { display: inline-flex; gap: 8px; align-items: center; }
+.drawer-line.err { color: var(--danger, #f85149); font-weight: 600; }
+.task-continue { margin-left: auto; padding: 4px 10px; font-size: 12px; }
