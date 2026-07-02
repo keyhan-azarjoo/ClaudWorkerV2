@@ -54,7 +54,7 @@ func cmdServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "path to cwv2.yaml (required)")
 	mode := fs.String("mode", "simulation", "live | simulation")
-	bind := fs.String("bind", ":8080", "HTTP bind address for the Control Plane API")
+	bind := fs.String("bind", "127.0.0.1:8080", "HTTP bind address for the Control Plane API (loopback by default; set an explicit host + a dashboard.token to expose it)")
 	web := fs.String("web", "", "directory of the Operations Console to serve at / (optional)")
 	claudeBin := fs.String("claude-bin", "claude", "Claude Code CLI binary (live mode worker)")
 	buildCmd := fs.String("build-cmd", "", "live-mode build verification command (default: go build ./...)")
