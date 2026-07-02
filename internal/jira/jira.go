@@ -159,25 +159,37 @@ type NamedField struct {
 	ID   string `json:"id"`
 }
 
-// SearchResult is a page of issues.
+// SearchResult is a page of issues. The bounded search/jql endpoint (below) paginates with an
+// opaque NextPageToken and no longer returns a Total (StartAt/MaxResults/Total are retained for
+// backward compatibility with older payloads but are not populated by /search/jql).
 type SearchResult struct {
-	StartAt    int     `json:"startAt"`
-	MaxResults int     `json:"maxResults"`
-	Total      int     `json:"total"`
-	Issues     []Issue `json:"issues"`
+	StartAt       int     `json:"startAt"`
+	MaxResults    int     `json:"maxResults"`
+	Total         int     `json:"total"`
+	Issues        []Issue `json:"issues"`
+	NextPageToken string  `json:"nextPageToken"`
+	IsLast        bool    `json:"isLast"`
 }
 
-// Search runs a JQL query (GET /search) requesting the given fields (nil = a sensible default set).
+// searchJQLRequest is the body for POST /rest/api/3/search/jql.
+type searchJQLRequest struct {
+	JQL           string   `json:"jql"`
+	MaxResults    int      `json:"maxResults,omitempty"`
+	Fields        []string `json:"fields,omitempty"`
+	NextPageToken string   `json:"nextPageToken,omitempty"`
+}
+
+// Search runs a JQL query via the bounded POST /rest/api/3/search/jql endpoint requesting the given
+// fields (nil = a sensible default set). The legacy GET /rest/api/3/search endpoint was removed by
+// Atlassian (CHANGE-2046, returns HTTP 410); this is its replacement. One page is returned; callers
+// that need more can follow SearchResult.NextPageToken.
 func (c *Client) Search(ctx context.Context, jql string, fields []string, maxResults int) (SearchResult, error) {
 	if len(fields) == 0 {
 		fields = []string{"summary", "status", "priority", "labels", "description", "issuelinks"}
 	}
-	q := url.Values{}
-	q.Set("jql", jql)
-	q.Set("maxResults", fmt.Sprintf("%d", maxResults))
-	q.Set("fields", strings.Join(fields, ","))
+	req := searchJQLRequest{JQL: jql, MaxResults: maxResults, Fields: fields}
 	var res SearchResult
-	err := c.do(ctx, "search", http.MethodGet, "/rest/api/3/search?"+q.Encode(), nil, &res)
+	err := c.do(ctx, "search", http.MethodPost, "/rest/api/3/search/jql", req, &res)
 	return res, err
 }
 

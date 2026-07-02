@@ -25,9 +25,9 @@ import (
 func mockJira(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /rest/api/3/search", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /rest/api/3/search/jql", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(jira.SearchResult{
-			Total: 1,
+			IsLast: true,
 			Issues: []jira.Issue{{Key: "SCRUM-1", Fields: jira.IssueFields{
 				Summary: "Add hello file", Status: jira.NamedField{Name: "To Do"},
 			}}},
