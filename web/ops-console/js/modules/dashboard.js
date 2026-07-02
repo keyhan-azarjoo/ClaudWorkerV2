@@ -4,6 +4,47 @@
 import { api, NotWired } from "api";
 import { el, card, kpi, badge, statusDot, sectionHead, emptyState, notWired, fmtTime, ago } from "ui";
 
+// State → badge tone (matches assignments.js so the whole console reads the same).
+const stateTone = (s) => ({ done: "ok", failed: "danger", merging: "info", qa: "warn", verifying: "warn", developing: "warn", claimed: "" }[s] || "");
+// Action status → glyph + tone for the per-task timeline.
+const actionGlyph = { done: { text: "✓", tone: "ok" }, running: { text: "running", tone: "warn" }, failed: { text: "✗", tone: "danger" } };
+const hhmmss = (iso) => String(iso || "").slice(11, 19) || "—";
+
+// One task box: header (issue + state badge + account) and the ordered action timeline.
+function taskBox(t) {
+  const actions = Array.isArray(t.actions) ? t.actions : [];
+  // Currently-running action = the LAST action whose status is "running".
+  let running = null;
+  for (const a of actions) if (a && a.status === "running") running = a;
+
+  const head = el(
+    "div",
+    { class: "task-box-head" },
+    el("span", { class: "task-issue mono" }, t.issue || "—"),
+    badge(t.state || "—", stateTone(t.state)),
+    t.account ? el("span", { class: "task-acct" }, "on " + t.account) : null
+  );
+
+  const nowLine = running ? el("div", { class: "task-now running" }, "▶ now: " + (running.stage || "—")) : null;
+
+  const rows = actions.map((a) => {
+    const g = actionGlyph[a.status] || { text: a.status || "?", tone: "" };
+    const isRunning = a.status === "running";
+    return el(
+      "div",
+      { class: "task-action" + (isRunning ? " running" : "") },
+      badge(g.text, g.tone),
+      el("span", { class: "task-stage" }, a.stage || "—"),
+      a.detail ? el("span", { class: "task-detail" }, a.detail) : null,
+      el("span", { class: "task-time mono" }, hhmmss(a.at))
+    );
+  });
+
+  const body = el("div", { class: "task-actions" }, ...(rows.length ? rows : [el("span", { class: "task-detail" }, "No actions yet")]));
+
+  return el("div", { class: "task-box" }, head, nowLine, body);
+}
+
 export default {
   title: "Dashboard",
   async render(outlet, ctx) {
@@ -55,6 +96,21 @@ export default {
       }
     }
 
+    // Per-task activity (one box per task, with its action timeline + currently-running action).
+    const tasksBody = el("div");
+    async function loadTasks() {
+      try {
+        const tasks = (await api.query("tasks.activity")) || [];
+        tasksBody.replaceChildren(
+          tasks.length
+            ? el("div", { class: "task-grid" }, ...tasks.map((t) => taskBox(t)))
+            : emptyState("No tasks yet", "Press Run on a Jira ticket or Start Working.")
+        );
+      } catch (e) {
+        tasksBody.replaceChildren(e instanceof NotWired ? notWired("tasks.activity") : emptyState("Unavailable", e.message));
+      }
+    }
+
     // Current work (assignments).
     const workBody = el("div");
     async function loadWork() {
@@ -73,6 +129,7 @@ export default {
     outlet.append(
       sectionHead("Operations overview", "The whole engineering system at a glance — live."),
       kpiGrid,
+      card("Tasks", tasksBody, { flush: true, sub: "per-task activity" }),
       el("div", { class: "grid cols-2 mb" }, card("Live activity", feed, { flush: true, sub: "SSE", action: statusDot(store.get().connected ? "ok" : "danger", true) }), card("Current work", workBody, { sub: "assignments" })),
       card("System status", statusBody, { sub: "control plane" })
     );
@@ -81,12 +138,19 @@ export default {
     renderFeed();
     loadStatus();
     loadWork();
+    loadTasks();
 
     // React to events (never poll).
     const off = stream.on((ev) => {
       renderKpis();
       renderFeed();
       if (ev.type.startsWith("Assignment")) loadWork();
+      // Re-render the Tasks section on every event so a task's timeline updates live.
+      try {
+        loadTasks();
+      } catch (e) {
+        /* keep the dashboard alive even if a reload throws */
+      }
     });
     const offStore = store.subscribe(() => {}); // keep store warm
 

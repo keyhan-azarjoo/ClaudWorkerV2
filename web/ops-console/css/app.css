@@ -143,6 +143,21 @@ table.tbl td.mono, table.tbl td .mono { font-family: var(--mono); font-size: 12p
 .feed-row .sys { color: var(--muted); font-family: var(--mono); font-size: 11px; }
 .feed-row .type { font-weight: 600; }
 
+/* Per-task activity — one box per task with its action timeline */
+.task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; padding: 14px 16px; }
+.task-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 13px; display: flex; flex-direction: column; gap: 10px; }
+.task-box-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-box-head .task-issue { font-weight: 700; font-size: 13px; color: var(--text); }
+.task-box-head .task-acct { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.task-now { font-size: 12px; font-weight: 600; color: var(--warn); padding: 4px 9px; border-radius: var(--radius-sm); border: 1px solid color-mix(in oklab, var(--warn) 40%, var(--border)); background: color-mix(in oklab, var(--warn) 12%, transparent); }
+.task-actions { display: flex; flex-direction: column; gap: 5px; }
+.task-action { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 5px; border-radius: var(--radius-sm); }
+.task-action .task-stage { font-weight: 600; color: var(--text); text-transform: capitalize; }
+.task-action .task-detail { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-action .task-time { margin-left: auto; color: var(--faint); font-size: 11px; white-space: nowrap; }
+.task-action.running { background: color-mix(in oklab, var(--warn) 12%, transparent); }
+.task-action.running .badge, .task-now.running { animation: pulse 1.6s ease-in-out infinite; }
+
 /* Forms / buttons */
 .btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 550; font-size: 13px; cursor: pointer; }
 .btn:hover { border-color: var(--accent); }
