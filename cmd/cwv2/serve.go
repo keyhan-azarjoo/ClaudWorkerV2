@@ -12,12 +12,14 @@ import (
 	"syscall"
 	"time"
 
+	gitadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/git"
 	jiraadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/jira"
 	"github.com/myotgo/ClaudWorkerV2/internal/adapters/sim"
 	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
 	"github.com/myotgo/ClaudWorkerV2/internal/config"
 	"github.com/myotgo/ClaudWorkerV2/internal/controlplane"
 	"github.com/myotgo/ClaudWorkerV2/internal/enginehome"
+	git "github.com/myotgo/ClaudWorkerV2/internal/git"
 	jira "github.com/myotgo/ClaudWorkerV2/internal/jira"
 	"github.com/myotgo/ClaudWorkerV2/internal/knowledge"
 	"github.com/myotgo/ClaudWorkerV2/internal/lease"
@@ -149,19 +151,30 @@ func buildOrchestrator(cfg config.Config, mode string) (*orchestrator.Orchestrat
 
 	cp := controlplane.NewServer(controlplane.NewBus(), controlplane.WithAuth(controlplane.TokenAuth{Token: cfg.Dashboard.Token}))
 
-	// Jira edge: REAL in live mode, simulated otherwise.
-	var jiraPort orchestrator.Jira
-	var liveJira *jiraadapter.Adapter
+	// Edges: REAL in live mode (Jira #1, Git #2), simulated otherwise.
+	var (
+		jiraPort  orchestrator.Jira      = sim.NewJira()
+		devPort   orchestrator.Developer = &sim.Developer{} // real Worker Runtime arrives in Phase 2.3
+		mergePort orchestrator.Merger    = sim.Merger{}     // becomes real via the Git adapter in live mode
+		cleaner   orchestrator.Workspace                    // nil in simulation
+		liveJira  *jiraadapter.Adapter
+		gitA      *gitadapter.Adapter
+	)
 	if live {
 		email, token, err := jiraCreds(cfg)
 		if err != nil {
 			return nil, nil, fmt.Errorf("live mode: %w", err)
 		}
-		client := jira.New(cfg.Jira.BaseURL, email, token)
-		liveJira = jiraadapter.New(client, cfg.Jira.WorkJQL)
+		liveJira = jiraadapter.New(jira.New(cfg.Jira.BaseURL, email, token), cfg.Jira.WorkJQL)
 		jiraPort = liveJira
-	} else {
-		jiraPort = sim.NewJira()
+
+		gitA, err = buildGit(cfg, l)
+		if err != nil {
+			return nil, nil, fmt.Errorf("live mode git: %w", err)
+		}
+		devPort = gitadapter.NewDeveloper(gitA, &sim.Developer{}) // real Git workspace + commit; sim reasoning
+		mergePort = gitadapter.NewMerger(gitA)                    // real --no-ff merge
+		cleaner = gitA                                            // real worktree/branch cleanup on terminal
 	}
 
 	o := orchestrator.New(&orchestrator.Orchestrator{
@@ -173,20 +186,46 @@ func buildOrchestrator(cfg config.Config, mode string) (*orchestrator.Orchestrat
 		Store:     store,
 		CP:        cp,
 		Jira:      jiraPort,
-		Developer: &sim.Developer{},  // real Worker Runtime arrives in Phase 2 #3
-		Verifier:  sim.NewVerifier(), // real Verification arrives in Phase 2 #4
-		Merger:    sim.Merger{},      // real Merge arrives in Phase 2 #5
+		Developer: devPort,
+		Verifier:  sim.NewVerifier(), // real Verification arrives in Phase 2.4
+		Merger:    mergePort,
+		Cleaner:   cleaner,
 		Cfg:       orchestrator.Config{DevBranch: devBranch(cfg)},
 	})
 	o.RegisterControlPlane()
 
-	// Live Jira page becomes real: a jira.queue query backed by the real adapter.
+	// Live Jira page becomes real.
 	if liveJira != nil {
-		cp.Query("jira.queue", func(ctx context.Context, _ url.Values) (any, error) {
-			return liveJira.Queue(ctx)
-		})
+		cp.Query("jira.queue", func(ctx context.Context, _ url.Values) (any, error) { return liveJira.Queue(ctx) })
+	}
+	// Live Git state → Control Plane (active worktrees, merge/conflict/cleanup status).
+	if gitA != nil {
+		cp.Query("git.worktrees", func(ctx context.Context, _ url.Values) (any, error) { return gitA.Worktrees(ctx) })
+		cp.Query("git.status", func(ctx context.Context, _ url.Values) (any, error) { return gitA.Status(ctx) })
 	}
 	return o, cp, nil
+}
+
+// buildGit prepares the engine's dedicated clone and returns the real Git adapter. The clone lives
+// under the engine home; per-assignment work happens in disposable worktrees (the main tree is never
+// touched). Live mode requires a reachable repo.
+func buildGit(cfg config.Config, l enginehome.Layout) (*gitadapter.Adapter, error) {
+	if len(cfg.Repos) == 0 {
+		return nil, fmt.Errorf("no repo configured")
+	}
+	repo := cfg.Repos[0]
+	g := git.New(git.WithIdentity(git.Identity{Name: cfg.GitHub.CommitIdentity.Name, Email: cfg.GitHub.CommitIdentity.Email}))
+	local := filepath.Join(l.ProjectDir, "repos", repo.Name)
+	if _, err := os.Stat(filepath.Join(local, ".git")); os.IsNotExist(err) {
+		if err := g.Clone(context.Background(), repo.URL, local); err != nil {
+			return nil, fmt.Errorf("clone %s: %w", repo.URL, err)
+		}
+	}
+	dev := repo.DevBranch
+	if dev == "" {
+		dev = "development"
+	}
+	return gitadapter.New(g, local, dev, filepath.Join(l.Worktrees, repo.Name)), nil
 }
 
 // jiraCreds resolves the Jira email + API token from the configured secret names.

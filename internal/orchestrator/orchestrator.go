@@ -68,6 +68,15 @@ type Merger interface {
 	Merge(ctx context.Context, issue string) (bool, error)
 }
 
+// Workspace optionally cleans up an assignment's Git workspace (worktree + branch) when the
+// assignment reaches a terminal state. It is OPTIONAL and nil-safe: simulation (and every pre-Phase-2.2
+// wiring) leaves it unset and is unaffected. It was introduced in Phase 2.2 because a real Git edge
+// must clean worktrees/branches on completion AND failure (safety), which no existing port covered —
+// the minimal change that keeps the loop safe without touching the Assignment or Policy engines.
+type Workspace interface {
+	Cleanup(ctx context.Context, issue string) error
+}
+
 // --- Orchestrator ---
 
 // Config carries the loop's non-subsystem knobs.
@@ -93,6 +102,7 @@ type Orchestrator struct {
 	Developer Developer
 	Verifier  Verifier
 	Merger    Merger
+	Cleaner   Workspace // optional (Phase 2.2); nil in simulation
 	Cfg       Config
 	Log       *slog.Logger
 

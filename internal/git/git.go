@@ -118,6 +118,17 @@ func (g *Git) Fetch(ctx context.Context, repo string) error {
 	return err
 }
 
+// Pull fetches and FAST-FORWARDS repo's current branch to remote/branch. It is ff-only (G-2): if the
+// branch has diverged it does NOT create a merge commit — it returns an error so the caller resolves
+// deliberately, keeping the tree clean and restart-safe. (Added for Phase 2.2; required Git capability.)
+func (g *Git) Pull(ctx context.Context, repo, remote, branch string) error {
+	if err := g.Fetch(ctx, repo); err != nil {
+		return err
+	}
+	_, err := g.run(ctx, "pull-ff", repo, "merge", "--ff-only", remote+"/"+branch)
+	return err
+}
+
 // ---- Inspection ----
 
 // CurrentRevision returns the full SHA of HEAD in repo.

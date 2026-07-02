@@ -30,6 +30,7 @@ const NAV = [
     items: [
       { path: "/resources", label: "Resources", ico: "resources" },
       { path: "/leases", label: "Leases", ico: "leases", countType: "LeaseGranted" },
+      { path: "/git", label: "Git", ico: "projects", countType: "MergeCompleted" },
       { path: "/runtimes", label: "AI Runtimes", ico: "runtimes" },
       { path: "/accounts", label: "Accounts", ico: "accounts" },
     ],
@@ -56,6 +57,7 @@ const MODULES = {
   "/policies": () => import("./modules/policies.js"),
   "/resources": () => import("./modules/resources.js"),
   "/leases": () => import("./modules/leases.js"),
+  "/git": () => import("./modules/git.js"),
   "/runtimes": () => import("./modules/runtimes.js"),
   "/accounts": () => import("./modules/accounts.js"),
   "/knowledge": () => import("./modules/knowledge.js"),
