@@ -91,6 +91,15 @@ func cmdServe(args []string) int {
 		return ch.validate(ctx), nil
 	})
 
+	// Account usage (5-hour + 7-day % used and reset times, like V1). Cached; refreshed on demand.
+	um := newUsageMonitor(cfg.Accounts)
+	cp.Query("accounts.usage", func(_ context.Context, _ url.Values) (any, error) {
+		return um.snapshot(), nil
+	})
+	cp.Command("accounts.usage.refresh", func(ctx context.Context, _ []byte) (any, error) {
+		return um.refresh(ctx, time.Now()), nil
+	})
+
 	if *once {
 		did, err := o.ProcessOnce(context.Background())
 		if err != nil {
