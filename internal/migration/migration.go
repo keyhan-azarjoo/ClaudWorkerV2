@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/myotgo/ClaudWorkerV2/internal/resource"
@@ -206,22 +207,22 @@ func migrateAccounts(d v1Data, m *[]MatrixRow) []resource.Resource {
 			"engine":            a.Engine,
 			"claude_config_dir": a.ConfigDir, // a reference to where creds live — NOT a secret value
 			"pace":              a.Pace,
-			"pause_pct":         itoa(a.PausePct),
-			"concurrency":       itoa(a.Concurrency),
+			"pause_pct":         strconv.Itoa(a.PausePct),
+			"concurrency":       strconv.Itoa(a.Concurrency),
 		}
 		if a.UseSonnet {
 			labels["model"] = "claude-sonnet"
 		}
 		if a.Days != "" || a.FromHour != 0 || a.ToHour != 0 {
 			labels["schedule_days"] = a.Days
-			labels["schedule_from"] = itoa(a.FromHour)
-			labels["schedule_to"] = itoa(a.ToHour)
+			labels["schedule_from"] = strconv.Itoa(a.FromHour)
+			labels["schedule_to"] = strconv.Itoa(a.ToHour)
 		}
 		out = append(out, resource.Resource{ID: "acct-" + slug(a.Label), Kind: kind, Name: a.Label, Labels: labels, Health: resource.HealthUnknown})
 	}
 	*m = append(*m, MatrixRow{Category: "AI Providers / Accounts",
-		Found:      itoa(len(d.config.Accounts)) + " (claude+codex)",
-		Imported:   itoa(len(out)) + " (" + itoa(claude) + " claude, " + itoa(codex) + " codex)",
+		Found:      strconv.Itoa(len(d.config.Accounts)) + " (claude+codex)",
+		Imported:   strconv.Itoa(len(out)) + " (" + strconv.Itoa(claude) + " claude, " + strconv.Itoa(codex) + " codex)",
 		Skipped:    "per-account usage counters + tokens (transient/secret)",
 		Validation: "each account → a resource with engine + config-dir reference",
 		Notes:      "config dirs migrated as references (creds stay in Keychain/config dir); pausePct/pace/schedule preserved as labels"})
@@ -249,9 +250,9 @@ func migrateDevices(d v1Data, m *[]MatrixRow) []resource.Resource {
 		imported++
 	}
 	*m = append(*m, MatrixRow{Category: "Resources / Devices",
-		Found:      itoa(len(d.devices)),
-		Imported:   itoa(imported) + " (android/iphone/esp32/build-machine)",
-		Skipped:    itoa(skipped) + " (modem/other non-compute) + inUse/mode (reservation state)",
+		Found:      strconv.Itoa(len(d.devices)),
+		Imported:   strconv.Itoa(imported) + " (android/iphone/esp32/build-machine)",
+		Skipped:    strconv.Itoa(skipped) + " (modem/other non-compute) + inUse/mode (reservation state)",
 		Missing:    "Mac Mini + DGX (no V1 device entry)",
 		Validation: "device type → V2 resource Kind; reach preserved as label",
 		Notes:      "reservation state (inUse) is transient → not migrated; V2 starts clean"})
@@ -274,7 +275,7 @@ func migrateUsageAndScheduling(d v1Data, r *Result) {
 	r.Config.Defaults.MinFreeGB = c.MinFreeGB
 	r.Matrix = append(r.Matrix, MatrixRow{Category: "Account Management (usage guard / pacing / scheduling / concurrency)",
 		Found:      "usagePausePct/ResumePct, maxConcurrent, scheduler, timeouts, model",
-		Imported:   "usage_guard(" + itoa(c.UsagePausePct) + "/" + itoa(c.UsageResumePct) + "), max_concurrent(" + itoa(c.MaxConcurrent) + "), model, timeouts",
+		Imported:   "usage_guard(" + strconv.Itoa(c.UsagePausePct) + "/" + strconv.Itoa(c.UsageResumePct) + "), max_concurrent(" + strconv.Itoa(c.MaxConcurrent) + "), model, timeouts",
 		Skipped:    "in-flight cap / current retries (transient)",
 		Validation: "usage guard → BudgetPolicy; concurrency → Workflow; per-account pace preserved on account resources",
 		Notes:      "rotation/failover/health are V2 Resource-Manager behaviours (already real); V1 knobs preserved as config + labels"})
@@ -285,7 +286,7 @@ func migrateJira(d v1Data, r *Result) {
 	if d.gate != nil {
 		r.Config.GateLabels.Required = d.gate.Required
 		r.Config.GateLabels.Blocking = d.gate.Blocking
-		imp = itoa(len(d.gate.Required)) + " required, " + itoa(len(d.gate.Blocking)) + " blocking labels"
+		imp = strconv.Itoa(len(d.gate.Required)) + " required, " + strconv.Itoa(len(d.gate.Blocking)) + " blocking labels"
 	} else {
 		found = "0"
 	}
@@ -319,14 +320,14 @@ func migrateVerification(r *Result) {
 
 func migrateDiscovery(d v1Data, r *Result) {
 	r.Matrix = append(r.Matrix, MatrixRow{Category: "Discovery (registered devices/runtimes/providers)",
-		Found: itoa(len(d.devices)) + " devices + " + accountsFound(d) + " accounts", Imported: "as V2 resource definitions (above)",
+		Found: strconv.Itoa(len(d.devices)) + " devices + " + accountsFound(d) + " accounts", Imported: "as V2 resource definitions (above)",
 		Skipped: "live reachability/health (re-probed by Phase B discovery)", Validation: "definitions → resources.json",
 		Notes: "real discovery/probing is Phase B #1; this migration seeds the inventory definitions"})
 }
 
 func migrateConsole(d v1Data, r *Result) {
 	r.Matrix = append(r.Matrix, MatrixRow{Category: "Operations Console (users/preferences/settings)",
-		Found: itoa(d.users) + " users", Imported: "0 (recorded as reference)",
+		Found: strconv.Itoa(d.users) + " users", Imported: "0 (recorded as reference)",
 		Skipped: "user records", Missing: "V2 has token auth, not a user DB", Validation: "n/a",
 		Notes: "V2 Control Plane uses token auth; user preferences are client-local (localStorage). Users recorded for reference only"})
 }
@@ -353,7 +354,7 @@ func migrateSSH(r *Result) {
 func migrateNotifications(d v1Data, r *Result) {
 	found := "0"
 	if d.config != nil && len(d.config.Voice) > 0 {
-		found = "voice config (" + itoa(len(d.config.Voice)) + " keys)"
+		found = "voice config (" + strconv.Itoa(len(d.config.Voice)) + " keys)"
 	}
 	r.Matrix = append(r.Matrix, MatrixRow{Category: "Notifications (telegram/email/webhook)",
 		Found: found, Imported: "0", Missing: "no notification subsystem in V2",
@@ -372,7 +373,7 @@ func migrateJobs(d v1Data, r *Result) {
 		n = len(d.config.Jobs)
 	}
 	r.Matrix = append(r.Matrix, MatrixRow{Category: "Jobs / role-agents (RETIRED)",
-		Found: itoa(n) + " role-agents (app/backend/qa/…)", Imported: "0",
+		Found: strconv.Itoa(n) + " role-agents (app/backend/qa/…)", Imported: "0",
 		Skipped:    "all — intentionally retired",
 		Validation: "n/a",
 		Notes:      "JUSTIFIED RETIREMENT: V2 is Jira-issue-driven (one Assignment per issue), not per-role cron agents. Role coverage is now emergent from the work queue"})
@@ -380,7 +381,7 @@ func migrateJobs(d v1Data, r *Result) {
 
 func migrateTransient(d v1Data, r *Result) {
 	r.Matrix = append(r.Matrix, MatrixRow{Category: "Transient runtime state (NOT migrated)",
-		Found:      "account usage counters (" + itoa(d.accountsStateCount) + "), sessions, in-flight, worktrees, retries, logs, snapshots",
+		Found:      "account usage counters (" + strconv.Itoa(d.accountsStateCount) + "), sessions, in-flight, worktrees, retries, logs, snapshots",
 		Imported:   "0",
 		Skipped:    "ALL — V2 starts clean by design",
 		Validation: "excluded by construction (never read)",
@@ -430,7 +431,7 @@ func accountsFound(d v1Data) string {
 	if d.config == nil {
 		return "0"
 	}
-	return itoa(len(d.config.Accounts))
+	return strconv.Itoa(len(d.config.Accounts))
 }
 
 func slug(s string) string {
@@ -447,28 +448,6 @@ func slug(s string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		b[i] = '-'
-	}
-	return string(b[i:])
 }
 
 func boolStr(c bool, a, b string) string {
