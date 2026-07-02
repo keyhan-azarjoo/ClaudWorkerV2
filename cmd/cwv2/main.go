@@ -51,6 +51,8 @@ func run(args []string) int {
 		return cmdAssignment(args[1:])
 	case "knowledge":
 		return cmdKnowledge(args[1:])
+	case "worker":
+		return cmdWorker(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return 0
@@ -72,11 +74,13 @@ usage:
   cwv2 jira   <subcommand> --config <cwv2.yaml> ... (deterministic Jira toolbelt; JSON output)
   cwv2 assignment list --config <cwv2.yaml>       (inspect the Assignment store)
   cwv2 knowledge  <subcommand> --config <cwv2.yaml> (Knowledge Brain; deterministic, zero tokens)
+  cwv2 worker     prompt ...                       (render a Worker Runtime prompt; zero tokens)
 
   cwv2 git        help
   cwv2 jira       help
   cwv2 assignment help
   cwv2 knowledge  help
+  cwv2 worker     help
 `)
 }
 
