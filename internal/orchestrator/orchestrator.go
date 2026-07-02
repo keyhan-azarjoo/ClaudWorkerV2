@@ -138,6 +138,7 @@ type Orchestrator struct {
 	mu        sync.Mutex
 	counters  map[string]int
 	taskLog   map[string]*TaskActivity
+	inflight  map[string]bool  // issues currently executing — guards against double-launch
 	decisions []map[string]any // policy-decision ring for the Policies page
 	lastIssue string
 	running   bool // the serve loop goroutine is alive
@@ -311,6 +312,22 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 func (o *Orchestrator) Recover(ctx context.Context) error {
 	if n, err := o.Leases.Reap(); err == nil && n > 0 {
 		o.emit(controlplane.EventLeaseExpired, "lease", map[string]any{"reaped": n})
+	}
+	// Release STALE per-run leases. Resource + merge leases are only valid for a live execution; on
+	// restart every prior execution is gone, so a killed run must not leave its account leased forever
+	// (that blocks all new runs at acquireRuntime). Also free issue leases whose assignment is terminal
+	// or no longer exists.
+	if act, lerr := o.Leases.Active(); lerr == nil {
+		for _, l := range act {
+			switch l.Kind {
+			case lease.KindResource, lease.KindMerge:
+				_, _ = o.Leases.Release(l.Kind, l.Resource, l.Owner)
+			case lease.KindIssue:
+				if a, ok, _ := o.Store.Load(l.Owner); !ok || a.State.Terminal() {
+					_, _ = o.Leases.Release(l.Kind, l.Resource, l.Owner)
+				}
+			}
+		}
 	}
 	all, err := o.Store.List()
 	if err != nil {
