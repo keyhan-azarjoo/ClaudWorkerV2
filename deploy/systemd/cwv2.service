@@ -1,0 +1,23 @@
+[Unit]
+Description=ClaudWorker V2 (Orchestrator + Control Plane)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/usr/local/bin/cwv2 validate --config /etc/cwv2/cwv2.yaml
+ExecStart=/usr/local/bin/cwv2 serve --config /etc/cwv2/cwv2.yaml --mode live --bind 127.0.0.1:8080 --web /usr/local/share/cwv2/web/ops-console
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+User=cwv2
+Group=cwv2
+StateDirectory=cwv2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/cwv2
+
+[Install]
+WantedBy=multi-user.target

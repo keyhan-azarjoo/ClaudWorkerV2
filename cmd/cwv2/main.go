@@ -57,6 +57,12 @@ func run(args []string) int {
 		return cmdServe(args[1:])
 	case "migrate":
 		return cmdMigrate(args[1:])
+	case "validate":
+		return cmdValidate(args[1:])
+	case "backup":
+		return cmdBackup(args[1:])
+	case "restore":
+		return cmdRestore(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return 0
