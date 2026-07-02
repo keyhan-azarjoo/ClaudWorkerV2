@@ -36,7 +36,7 @@ func (e *Engine) log() *slog.Logger {
 	if e.Log != nil {
 		return e.Log
 	}
-	return slog.New(discardHandler{})
+	return slog.New(slog.DiscardHandler)
 }
 
 // ClaimAndRun searches the work queue, claims the first eligible unclaimed issue, and drives it to a

@@ -1,20 +1,10 @@
 package git
 
 import (
-	"context"
-	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
 )
-
-// discardHandler is a no-op slog.Handler so a Git without a logger is safe to use.
-type discardHandler struct{}
-
-func (discardHandler) Enabled(context.Context, slog.Level) bool  { return false }
-func (discardHandler) Handle(context.Context, slog.Record) error { return nil }
-func (d discardHandler) WithAttrs([]slog.Attr) slog.Handler      { return d }
-func (d discardHandler) WithGroup(string) slog.Handler           { return d }
 
 func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

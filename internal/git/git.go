@@ -34,9 +34,6 @@ type Git struct {
 // Option configures a Git.
 type Option func(*Git)
 
-// WithBinary overrides the git binary path (default "git").
-func WithBinary(path string) Option { return func(g *Git) { g.bin = path } }
-
 // WithLogger sets the structured logger (default: discard).
 func WithLogger(l *slog.Logger) Option { return func(g *Git) { g.log = l } }
 
@@ -45,7 +42,7 @@ func WithIdentity(id Identity) Option { return func(g *Git) { g.id = id } }
 
 // New builds a Git client.
 func New(opts ...Option) *Git {
-	g := &Git{bin: "git", log: slog.New(discardHandler{})}
+	g := &Git{bin: "git", log: slog.New(slog.DiscardHandler)}
 	for _, o := range opts {
 		o(g)
 	}
@@ -118,16 +115,6 @@ func (g *Git) Clone(ctx context.Context, url, dir string) error {
 // Fetch updates remote refs (with prune). Restart-safe and idempotent.
 func (g *Git) Fetch(ctx context.Context, repo string) error {
 	_, err := g.run(ctx, "fetch", repo, "fetch", "--prune", "--tags")
-	return err
-}
-
-// Pull fast-forwards branch from its upstream. Fails (no merge commit) if not fast-forwardable,
-// keeping the tree deterministic.
-func (g *Git) Pull(ctx context.Context, repo, branch string) error {
-	if _, err := g.run(ctx, "checkout", repo, "checkout", branch); err != nil {
-		return err
-	}
-	_, err := g.run(ctx, "pull", repo, "pull", "--ff-only")
 	return err
 }
 

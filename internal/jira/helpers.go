@@ -1,19 +1,9 @@
 package jira
 
 import (
-	"context"
 	"encoding/json"
-	"log/slog"
 	"strings"
 )
-
-// discardHandler is a no-op slog.Handler so a Client without a logger is safe to use.
-type discardHandler struct{}
-
-func (discardHandler) Enabled(context.Context, slog.Level) bool  { return false }
-func (discardHandler) Handle(context.Context, slog.Record) error { return nil }
-func (d discardHandler) WithAttrs([]slog.Attr) slog.Handler      { return d }
-func (d discardHandler) WithGroup(string) slog.Handler           { return d }
 
 // redactPath strips any query values that might carry sensitive data (defensive; Jira paths don't
 // carry secrets, but we never want a token or PII in a log).
