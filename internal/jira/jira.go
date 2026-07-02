@@ -36,9 +36,6 @@ type Client struct {
 // Option configures a Client.
 type Option func(*Client)
 
-// WithHTTPClient overrides the HTTP client (e.g. for tests / timeouts).
-func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
-
 // WithLogger sets the structured logger.
 func WithLogger(l *slog.Logger) Option { return func(c *Client) { c.log = l } }
 
@@ -53,7 +50,7 @@ func New(baseURL, email, token string, opts ...Option) *Client {
 		email: email,
 		token: token,
 		http:  &http.Client{Timeout: 30 * time.Second},
-		log:   slog.New(discardHandler{}),
+		log:   slog.New(slog.DiscardHandler),
 	}
 	for _, o := range opts {
 		o(c)

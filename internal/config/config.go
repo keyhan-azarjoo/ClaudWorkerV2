@@ -26,9 +26,6 @@ type Config struct {
 	UsageGuard UsageGuard        `yaml:"usage_guard"`
 	QA         QA                `yaml:"qa"`
 	Dashboard  Dashboard         `yaml:"dashboard"`
-
-	// path is the file this config was loaded from (not serialized).
-	path string `yaml:"-"`
 }
 
 type Jira struct {
@@ -148,9 +145,6 @@ func builtinDefaults() Defaults {
 	}
 }
 
-// Path returns the file the config was loaded from.
-func (c *Config) Path() string { return c.path }
-
 // Load reads, parses, applies defaults, and validates a cwv2.yaml at path.
 func Load(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
@@ -161,7 +155,6 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
-	c.path = path
 	return c, nil
 }
 
