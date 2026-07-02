@@ -2,10 +2,35 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/myotgo/ClaudWorkerV2/internal/resource"
 )
+
+// setAccountPaused pauses/resumes one account resource by id (body: {"id":"..."}).
+func (o *Orchestrator) setAccountPaused(body []byte, paused bool) (any, error) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(body, &req)
+	req.ID = strings.TrimSpace(req.ID)
+	if req.ID == "" {
+		return nil, fmt.Errorf("account id required")
+	}
+	found := o.Resources.SetPaused(req.ID, paused)
+	if !found {
+		return nil, fmt.Errorf("unknown account %q", req.ID)
+	}
+	event := "AccountResumed"
+	if paused {
+		event = "AccountPaused"
+	}
+	o.emit(event, "resource", map[string]any{"id": req.ID, "paused": paused})
+	return map[string]any{"id": req.ID, "paused": paused}, nil
+}
 
 // RegisterControlPlane registers every query, command, status provider and metric so the Operations
 // Console becomes fully live. Each handler simply delegates to a subsystem — the Control Plane (and
@@ -56,6 +81,32 @@ func (o *Orchestrator) RegisterControlPlane() {
 	o.CP.Command("orchestrator.tick", func(ctx context.Context, _ []byte) (any, error) {
 		did, err := o.ProcessOnce(ctx)
 		return map[string]any{"processed": did}, err
+	})
+	// orchestrator.run {"issue":"SCRUM-123"} — operator picks ONE ticket to run now (manual select),
+	// regardless of the ready label or idle state. Runs in the background; watch via events/assignments.
+	o.CP.Command("orchestrator.run", func(_ context.Context, body []byte) (any, error) {
+		var req struct {
+			Issue string `json:"issue"`
+		}
+		_ = json.Unmarshal(body, &req)
+		req.Issue = strings.TrimSpace(req.Issue)
+		if req.Issue == "" {
+			return nil, fmt.Errorf("issue key required")
+		}
+		go func() {
+			if _, err := o.RunIssue(context.Background(), req.Issue); err != nil {
+				o.log().Error("orchestrator", "op", "manual-run", "issue", req.Issue, "error", err.Error())
+				o.emit("AssignmentFailed", "orchestrator", map[string]any{"issue": req.Issue, "error": err.Error()})
+			}
+		}()
+		return map[string]any{"issue": req.Issue, "started": true}, nil
+	})
+	// accounts.pause / accounts.resume {"id":"acct-myotgo"} — per-account operator control (V1 parity).
+	o.CP.Command("accounts.pause", func(_ context.Context, body []byte) (any, error) {
+		return o.setAccountPaused(body, true)
+	})
+	o.CP.Command("accounts.resume", func(_ context.Context, body []byte) (any, error) {
+		return o.setAccountPaused(body, false)
 	})
 	o.CP.Command("leases.reap", func(context.Context, []byte) (any, error) {
 		n, err := o.Leases.Reap()

@@ -1,18 +1,65 @@
-import { listModule, badge } from "ui";
+// accounts.js — AI provider accounts with operator control (V1 parity): pause an account to keep it
+// out of rotation, resume to bring it back. State comes from resources.snapshot (derived availability).
+import { api } from "api";
+import { el, card, sectionHead, badge, table, button } from "ui";
 
+const availTone = (a) => ({ available: "ok", paused: "warn", cooldown: "info", offline: "danger", reserved: "info" }[a] || "");
 const healthTone = (h) => ({ healthy: "ok", degraded: "warn", down: "danger" }[h] || "");
 
-export default listModule({
+export default {
   title: "Accounts",
-  desc: "AI provider accounts — usage, pacing and cooldown. The pause decision lives in the Budget policy.",
-  query: "accounts.list",
-  events: ["RuntimeStarted", "RuntimeFinished"],
-  empty: "No accounts registered",
-  columns: [
-    { key: "id", label: "Account", mono: true },
-    { key: "kind", label: "Kind", render: (r) => badge(r.kind) },
-    { key: "health", label: "Health", render: (r) => badge(r.health, healthTone(r.health)) },
-    { key: "usage", label: "Usage", mono: true, render: (r) => (r.metrics ? (r.metrics.usage_pct ?? 0) + "%" : "—") },
-    { key: "cooldown", label: "Cooldown", mono: true, render: (r) => (r.cooldown_until ? "until " + r.cooldown_until : "—") },
-  ],
-});
+  async render(outlet) {
+    const body = el("div", {}, el("div", { class: "notice" }, "Loading…"));
+    outlet.append(
+      sectionHead("Accounts", "Claude accounts in rotation. Pause one to keep it out of selection; resume to bring it back (like V1)."),
+      card("Accounts", body)
+    );
+
+    async function load() {
+      try {
+        const all = (await api.query("resources.snapshot")) || [];
+        const rows = all
+          .filter((r) => r.kind === "claude_account")
+          .map((r) => ({
+            id: r.id,
+            model: (r.labels && r.labels.model) || "—",
+            health: r.health,
+            availability: r.availability,
+            paused: r.availability === "paused",
+          }));
+        body.replaceChildren(
+          table(
+            [
+              { key: "id", label: "Account", mono: true },
+              { key: "model", label: "Model" },
+              { key: "health", label: "Health", render: (r) => badge(r.health, healthTone(r.health)) },
+              { key: "availability", label: "State", render: (r) => badge(r.availability, availTone(r.availability)) },
+              {
+                key: "action",
+                label: "",
+                render: (r) =>
+                  button(r.paused ? "Resume" : "Pause", {
+                    tone: r.paused ? "primary" : "",
+                    onClick: async (e) => {
+                      const b = e.target;
+                      b.textContent = "…";
+                      try {
+                        await api.command(r.paused ? "accounts.resume" : "accounts.pause", { id: r.id });
+                      } catch (err) {
+                        body.prepend(el("div", { class: "notice danger" }, "Failed: " + (err && err.message ? err.message : err)));
+                      }
+                      load();
+                    },
+                  }),
+              },
+            ],
+            rows
+          )
+        );
+      } catch (e) {
+        body.replaceChildren(el("div", { class: "notice danger" }, "Failed to load accounts: " + (e && e.message ? e.message : e)));
+      }
+    }
+    load();
+  },
+};

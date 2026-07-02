@@ -10,6 +10,8 @@ import (
 // Available. (Degraded health is still Available — just deprioritised by selection.)
 func (m *Manager) availabilityOf(r *Resource) Availability {
 	switch {
+	case r.paused:
+		return Paused
 	case r.Health == HealthDown:
 		return Offline
 	case !r.CooldownUntil.IsZero() && m.now().Before(r.CooldownUntil):
@@ -40,6 +42,26 @@ func (m *Manager) Cooldown(id string, until time.Time) {
 	if r, ok := m.res[id]; ok {
 		r.CooldownUntil = until
 	}
+}
+
+// SetPaused manually pauses/resumes a resource (operator control, like V1's per-account pause). A
+// paused resource is never selected for work until resumed. Returns false if the id is unknown.
+func (m *Manager) SetPaused(id string, paused bool) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.res[id]
+	if ok {
+		r.paused = paused
+	}
+	return ok
+}
+
+// IsPaused reports whether a resource is manually paused.
+func (m *Manager) IsPaused(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.res[id]
+	return ok && r.paused
 }
 
 // candidates returns available resources matching the filter, ordered by the deterministic scheduling
