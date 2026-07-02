@@ -80,6 +80,13 @@ func cmdServe(args []string) int {
 		return emitErr(err)
 	}
 
+	// Credentials view (owner-facing): the Claude accounts + the secrets the platform can use. Values
+	// are masked unless ?reveal=1. The list of secret env vars comes from CWV2_CREDENTIAL_KEYS (the
+	// names loaded from the operator's secret store); no secret is ever hardcoded.
+	cp.Query("credentials.snapshot", func(_ context.Context, q url.Values) (any, error) {
+		return credentialsSnapshot(o.Resources, q.Get("reveal") == "1"), nil
+	})
+
 	if *once {
 		did, err := o.ProcessOnce(context.Background())
 		if err != nil {
@@ -341,4 +348,41 @@ func devBranch(cfg config.Config) string {
 		}
 	}
 	return "development"
+}
+
+// credentialsSnapshot returns the accounts + secrets the platform is configured with, for the
+// Operations Console Credentials page. Secret values are masked unless reveal is true. The set of
+// secret env-var names is taken from CWV2_CREDENTIAL_KEYS (comma/space separated).
+func credentialsSnapshot(res *resource.Manager, reveal bool) map[string]any {
+	accounts := []map[string]any{}
+	if res != nil {
+		for _, r := range res.List(resource.Filter{Kind: resource.KindClaudeAccount}) {
+			accounts = append(accounts, map[string]any{
+				"id": r.ID, "name": r.Name, "health": string(r.Health),
+				"config_dir": r.Labels["claude_config_dir"], "model": r.Labels["model"],
+			})
+		}
+	}
+	secrets := []map[string]any{}
+	for _, k := range strings.FieldsFunc(os.Getenv("CWV2_CREDENTIAL_KEYS"), func(r rune) bool { return r == ',' || r == ' ' || r == '\n' }) {
+		v := os.Getenv(k)
+		m := map[string]any{"name": k, "present": v != "", "masked": maskSecret(v)}
+		if reveal && v != "" {
+			m["value"] = v
+		}
+		secrets = append(secrets, m)
+	}
+	return map[string]any{"accounts": accounts, "secrets": secrets, "revealed": reveal}
+}
+
+// maskSecret shows only enough to recognise a value without disclosing it.
+func maskSecret(v string) string {
+	switch {
+	case v == "":
+		return ""
+	case len(v) <= 4:
+		return "••••"
+	default:
+		return "••••" + v[len(v)-4:]
+	}
 }
