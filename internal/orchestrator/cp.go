@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
 	"github.com/myotgo/ClaudWorkerV2/internal/resource"
 )
 
@@ -140,6 +141,43 @@ func (o *Orchestrator) RegisterControlPlane() {
 			}
 		}()
 		return map[string]any{"issue": req.Issue, "account": req.Account, "started": true}, nil
+	})
+	// orchestrator.continue {"issue":"SCRUM-123"} — resume/retry a task that errored (e.g. a transient
+	// rate limit / API error). A FAILED task is reset so it runs again on a fresh (non-cooled) account;
+	// a stuck non-terminal task is resumed. A DONE task is left alone.
+	o.CP.Command("orchestrator.continue", func(_ context.Context, body []byte) (any, error) {
+		var req struct {
+			Issue   string `json:"issue"`
+			Account string `json:"account"`
+		}
+		_ = json.Unmarshal(body, &req)
+		req.Issue = strings.TrimSpace(req.Issue)
+		req.Account = strings.TrimSpace(req.Account)
+		if req.Issue == "" {
+			return nil, fmt.Errorf("issue key required")
+		}
+		o.mu.Lock()
+		running := o.inflight[req.Issue]
+		o.mu.Unlock()
+		if running {
+			return nil, fmt.Errorf("%s is already running", req.Issue)
+		}
+		if a, exists, _ := o.Store.Load(req.Issue); exists {
+			if a.State == assignment.StateDone {
+				return nil, fmt.Errorf("%s is already done", req.Issue)
+			}
+			if a.State.Terminal() { // failed → reset to non-terminal so it can run again
+				a.State = assignment.StateClaimed
+				_ = o.Store.Save(a)
+			}
+		}
+		go func() {
+			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account); err != nil {
+				o.log().Error("orchestrator", "op", "continue", "issue", req.Issue, "error", err.Error())
+				o.emit("AssignmentFailed", "orchestrator", map[string]any{"issue": req.Issue, "error": err.Error()})
+			}
+		}()
+		return map[string]any{"issue": req.Issue, "continued": true}, nil
 	})
 	// accounts.pause / accounts.resume {"id":"acct-myotgo"} — per-account operator control (V1 parity).
 	o.CP.Command("accounts.pause", func(_ context.Context, body []byte) (any, error) {
