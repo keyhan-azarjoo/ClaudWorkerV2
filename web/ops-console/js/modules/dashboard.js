@@ -11,7 +11,7 @@ const actionGlyph = { done: { text: "✓", tone: "ok" }, running: { text: "runni
 const hhmmss = (iso) => String(iso || "").slice(11, 19) || "—";
 
 // One task box: header (issue + state badge + account) and the ordered action timeline.
-function taskBox(t) {
+function taskBox(t, agentCount) {
   const actions = Array.isArray(t.actions) ? t.actions : [];
   // Currently-running action = the LAST action whose status is "running".
   let running = null;
@@ -22,6 +22,7 @@ function taskBox(t) {
     { class: "task-box-head" },
     el("span", { class: "task-issue mono" }, t.issue || "—"),
     badge(t.state || "—", stateTone(t.state)),
+    agentCount > 0 ? el("span", { class: "task-agents" }, "⚡ " + agentCount + " agent" + (agentCount === 1 ? "" : "s")) : null,
     t.account ? el("span", { class: "task-acct" }, "on " + t.account) : null
   );
 
@@ -100,10 +101,13 @@ export default {
     const tasksBody = el("div");
     async function loadTasks() {
       try {
-        const tasks = (await api.query("tasks.activity")) || [];
+        const [tasks, agents] = await Promise.all([
+          api.query("tasks.activity").then((x) => x || []),
+          api.query("tasks.agents").catch(() => ({})),
+        ]);
         tasksBody.replaceChildren(
           tasks.length
-            ? el("div", { class: "task-grid" }, ...tasks.map((t) => taskBox(t)))
+            ? el("div", { class: "task-grid" }, ...tasks.map((t) => taskBox(t, (agents || {})[t.issue] || 0)))
             : emptyState("No tasks yet", "Press Run on a Jira ticket or Start Working.")
         );
       } catch (e) {

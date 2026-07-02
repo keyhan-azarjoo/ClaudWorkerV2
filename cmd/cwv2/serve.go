@@ -91,6 +91,11 @@ func cmdServe(args []string) int {
 		return ch.validate(ctx), nil
 	})
 
+	// tasks.agents — live count of worker/subagent processes per task (for the dashboard box header).
+	cp.Query("tasks.agents", func(_ context.Context, _ url.Values) (any, error) {
+		return taskAgentCounts(), nil
+	})
+
 	// Account usage (5-hour + 7-day % used and reset times, like V1). Cached; refreshed on demand.
 	um := newUsageMonitor(cfg.Accounts)
 	cp.Query("accounts.usage", func(_ context.Context, _ url.Values) (any, error) {
