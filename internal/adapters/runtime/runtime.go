@@ -101,7 +101,9 @@ func (w *Worker) Develop(ctx context.Context, worktree string, in orchestrator.D
 	acct := w.Accounts[in.Account] // zero Account (default env) if unknown/empty
 	rt := runtime.ClaudeWorkerRuntime{Bin: w.Bin, Dir: worktree, Env: accountEnv(acct)}
 	if acct.Model != "" {
-		rt.Args = []string{"-p", "--output-format", "json", "--model", acct.Model}
+		// Mirror defaultClaudeArgs + pin the account's model. --permission-mode acceptEdits is required
+		// for autonomous file edits in headless -p mode (see runtime.defaultClaudeArgs).
+		rt.Args = []string{"-p", "--output-format", "json", "--permission-mode", "acceptEdits", "--model", acct.Model}
 	}
 	wi := assignment.WorkerInput{
 		IssueKey:           in.Issue,

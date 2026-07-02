@@ -20,9 +20,19 @@ import (
 // It is stateless: no field survives a Run, so every execution starts clean (disposable, Law 4).
 type ClaudeWorkerRuntime struct {
 	Bin  string   // provider binary; default "claude"
-	Args []string // extra args; default ["-p","--output-format","json"] (prompt arrives on stdin)
+	Args []string // extra args; default defaultClaudeArgs (prompt arrives on stdin)
 	Dir  string   // working directory for the process (the assignment worktree); "" = inherit
 	Env  []string // extra environment (e.g. CLAUDE_CONFIG_DIR for the selected account); appended to os.Environ
+}
+
+// defaultClaudeArgs is the headless invocation. `--permission-mode acceptEdits` is REQUIRED for
+// autonomous operation: in `-p` (print) mode there is no interactive approver, so without it the CLI
+// refuses file-editing tools ("pending your permission approval to write it") and every assignment
+// produces zero changes. acceptEdits auto-accepts file edits (Write/Edit) — the least privilege that
+// lets the worker implement code — without the broader `--dangerously-skip-permissions` (which would
+// also allow arbitrary Bash). The worker runs in a disposable, isolated worktree (Law 4).
+func defaultClaudeArgs() []string {
+	return []string{"-p", "--output-format", "json", "--permission-mode", "acceptEdits"}
 }
 
 // Name identifies the provider.
@@ -40,7 +50,7 @@ func (w ClaudeWorkerRuntime) Run(ctx context.Context, in assignment.WorkerInput)
 	}
 	args := w.Args
 	if args == nil {
-		args = []string{"-p", "--output-format", "json"}
+		args = defaultClaudeArgs()
 	}
 	prompt := BuildPrompt(in)
 	resp := Response{PromptBytes: len(prompt)}
