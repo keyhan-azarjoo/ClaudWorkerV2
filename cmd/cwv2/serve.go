@@ -12,10 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/myotgo/ClaudWorkerV2/internal/adapters/discovery"
 	gitadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/git"
 	jiraadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/jira"
 	runtimeadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/runtime"
 	"github.com/myotgo/ClaudWorkerV2/internal/adapters/sim"
+	verifyadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/verify"
 	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
 	"github.com/myotgo/ClaudWorkerV2/internal/config"
 	"github.com/myotgo/ClaudWorkerV2/internal/controlplane"
@@ -40,8 +42,8 @@ func serveUsage() {
 modes:
   simulation  run the FULL loop with deterministic adapters — no Claude/Jira/GitHub/devices/hardware
               (the regression + demo environment). Requires no credentials.
-  live        use the real Jira adapter (Phase 2 #1). Worker/Verify/Merge/Resource-discovery are still
-              simulated until their integration iterations, so the platform stays fully functional.
+  live        real Jira + Git + Claude runtime + resource discovery + build/API/web verification.
+              Device/visual verification drivers activate when hardware is connected.
 
   --once      run one orchestration step and exit (prints JSON). No HTTP server. Good for CI/demo.
 `)
@@ -148,20 +150,28 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string) (*orchestrator
 	}
 
 	res := resource.New()
-	// Until real resource discovery (Phase 2 #6), register a default runtime account so the loop runs.
-	res.Register(resource.Resource{ID: "claude-1", Kind: resource.KindClaudeAccount, Name: "claude-1", Health: resource.HealthHealthy})
+	if live {
+		// Real Resource Discovery (Phase B #1): probe accounts, local providers and devices via the
+		// Resource Manager (no duplicated logic). Best-effort — missing tools/endpoints yield nothing.
+		discoverLiveFleet(res)
+	}
+	// Ensure at least one runtime account so the loop always runs (fallback / simulation default).
+	if len(res.List(resource.Filter{Kind: resource.KindClaudeAccount})) == 0 {
+		res.Register(resource.Resource{ID: "claude-1", Kind: resource.KindClaudeAccount, Name: "claude-1", Health: resource.HealthHealthy})
+	}
 
 	cp := controlplane.NewServer(controlplane.NewBus(), controlplane.WithAuth(controlplane.TokenAuth{Token: cfg.Dashboard.Token}))
 
 	// Edges: REAL in live mode (Jira #1, Git #2), simulated otherwise.
 	var (
-		jiraPort  orchestrator.Jira      = sim.NewJira()
-		devPort   orchestrator.Developer = &sim.Developer{} // real Worker Runtime arrives in Phase 2.3
-		mergePort orchestrator.Merger    = sim.Merger{}     // becomes real via the Git adapter in live mode
-		cleaner   orchestrator.Workspace                    // nil in simulation
-		liveJira  *jiraadapter.Adapter
-		gitA      *gitadapter.Adapter
-		worker    *runtimeadapter.Worker
+		jiraPort   orchestrator.Jira      = sim.NewJira()
+		devPort    orchestrator.Developer = &sim.Developer{}  // real Worker Runtime arrives in Phase 2.3
+		mergePort  orchestrator.Merger    = sim.Merger{}      // becomes real via the Git adapter in live mode
+		cleaner    orchestrator.Workspace                     // nil in simulation
+		verifyPort orchestrator.Verifier  = sim.NewVerifier() // real in live
+		liveJira   *jiraadapter.Adapter
+		gitA       *gitadapter.Adapter
+		worker     *runtimeadapter.Worker
 	)
 	if live {
 		email, token, err := jiraCreds(cfg)
@@ -183,6 +193,15 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string) (*orchestrator
 		devPort = gitadapter.NewDeveloper(gitA, worker) // real Git workspace + REAL Claude worker
 		mergePort = gitadapter.NewMerger(gitA)          // real --no-ff merge
 		cleaner = gitA                                  // real worktree/branch cleanup on terminal
+
+		// Real Verification (Phase B #2): build (+ optional API/web) verifiers over the git clone.
+		// Device/visual drivers are wired when hardware is present; build/API/web are headless.
+		repoLocal := ""
+		if len(cfg.Repos) > 0 {
+			repoLocal = filepath.Join(l.ProjectDir, "repos", cfg.Repos[0].Name)
+		}
+		veng, vplan := verifyadapter.BuildEngine(verifyadapter.Options{RepoDir: repoLocal})
+		verifyPort = verifyadapter.New(veng, vplan...)
 	}
 
 	o := orchestrator.New(&orchestrator.Orchestrator{
@@ -195,7 +214,7 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string) (*orchestrator
 		CP:        cp,
 		Jira:      jiraPort,
 		Developer: devPort,
-		Verifier:  sim.NewVerifier(), // real Verification arrives in Phase 2.4
+		Verifier:  verifyPort, // real in live (Phase B #2); sim otherwise
 		Merger:    mergePort,
 		Cleaner:   cleaner,
 		Cfg:       orchestrator.Config{DevBranch: devBranch(cfg)},
@@ -216,6 +235,42 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string) (*orchestrator
 		cp.Query("runtime.state", func(context.Context, url.Values) (any, error) { return worker.Snapshot(), nil })
 	}
 	return o, cp, nil
+}
+
+// discoverLiveFleet runs real discovery (best-effort) into the Resource Manager: local model
+// providers, Android/iOS-sim/ESP32 devices, and Claude accounts from their config dirs.
+func discoverLiveFleet(res *resource.Manager) {
+	comp := discovery.Composite{
+		discovery.Provider{ID: "ollama", BaseURL: "http://127.0.0.1:11434", Ollama: true},
+		discovery.Provider{ID: "lmstudio", BaseURL: "http://127.0.0.1:1234"},
+		discovery.Adb{},
+		discovery.Simctl{},
+		discovery.Serial{},
+		discovery.Accounts{Kind: resource.KindClaudeAccount, Dirs: defaultClaudeDirs()},
+	}
+	_ = res.Discover(comp) // best-effort; never fatal
+}
+
+// defaultClaudeDirs finds Claude account config dirs under the conventional locations.
+func defaultClaudeDirs() map[string]string {
+	out := map[string]string{}
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return out
+	}
+	for _, base := range []string{filepath.Join(home, ".cw-accounts")} {
+		if entries, err := os.ReadDir(base); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					out[e.Name()] = filepath.Join(base, e.Name())
+				}
+			}
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude")); err == nil {
+		out["default"] = filepath.Join(home, ".claude")
+	}
+	return out
 }
 
 // accountsFrom maps the Resource Manager's Claude-account resources to executable runtime accounts.
