@@ -57,6 +57,7 @@ export default {
                       tone: "primary",
                       onClick: async (e) => {
                         const b = e.target;
+                        if (!confirm(`Run ${r.key} for real?\n\nThe engine will edit the repo, verify the build, and merge to development if it passes.`)) return;
                         b.textContent = "Started";
                         b.disabled = true;
                         try {
