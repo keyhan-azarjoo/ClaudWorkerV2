@@ -41,9 +41,14 @@ type Jira interface {
 	Comment(ctx context.Context, key, text string) error
 }
 
-// DevInput is exactly what a develop/improve step gives the runtime (the four permitted prompt inputs).
+// DevInput is what a develop/improve step gives the runtime. The prompt is built from ONLY the four
+// permitted fields (Issue+Summary = Assignment, AcceptanceCriteria, KnowledgeContext, and relevant
+// files the runtime reads from the worktree). Runtime + Account are execution routing (which provider,
+// which Resource-Manager-selected account) — they NEVER enter the prompt. Account was added in Phase
+// 2.3 so the Worker Runtime executes under the account the Resource Manager selected (multi-account);
+// the runtime still never CHOOSES the account.
 type DevInput struct {
-	Issue, Summary, AcceptanceCriteria, KnowledgeContext, Runtime string
+	Issue, Summary, AcceptanceCriteria, KnowledgeContext, Runtime, Account string
 }
 
 // DevResult is a worker outcome (files changed). Real impl wraps runtime.Runner; tests fake it.
@@ -322,9 +327,9 @@ func pick(cond bool, a, b string) string {
 
 // buildImprovement wires S8 (verify) + S9 (improve) + S6 (policy) into the improvement loop for one
 // issue, reusing each subsystem — the Orchestrator adds no loop logic of its own.
-func (o *Orchestrator) buildImprovement(iss Issue, kctx, runtimeName string) *improvement.Engine {
+func (o *Orchestrator) buildImprovement(iss Issue, kctx, runtimeName, account string) *improvement.Engine {
 	verifier := &impVerifier{o: o, issue: iss.Key}
-	improver := &impImprover{o: o, iss: iss, kctx: kctx, runtime: runtimeName}
+	improver := &impImprover{o: o, iss: iss, kctx: kctx, runtime: runtimeName, account: account}
 	dec := improvement.NewPolicyDecider(o.Policy)
 	eng := improvement.New(verifier, improver, dec, improvement.WithClock(o.now))
 	eng.MaxIterations = o.Cfg.MaxImprovementIters

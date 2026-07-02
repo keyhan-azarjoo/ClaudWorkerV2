@@ -14,6 +14,7 @@ import (
 
 	gitadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/git"
 	jiraadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/jira"
+	runtimeadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/runtime"
 	"github.com/myotgo/ClaudWorkerV2/internal/adapters/sim"
 	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
 	"github.com/myotgo/ClaudWorkerV2/internal/config"
@@ -52,6 +53,7 @@ func cmdServe(args []string) int {
 	mode := fs.String("mode", "simulation", "live | simulation")
 	bind := fs.String("bind", ":8080", "HTTP bind address for the Control Plane API")
 	web := fs.String("web", "", "directory of the Operations Console to serve at / (optional)")
+	claudeBin := fs.String("claude-bin", "claude", "Claude Code CLI binary (live mode worker)")
 	once := fs.Bool("once", false, "run one orchestration step and exit")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -67,7 +69,7 @@ func cmdServe(args []string) int {
 	}
 	log := logging.Default()
 
-	o, cp, err := buildOrchestrator(*cfg, *mode)
+	o, cp, err := buildOrchestrator(*cfg, *mode, *claudeBin)
 	if err != nil {
 		return emitErr(err)
 	}
@@ -117,7 +119,7 @@ func cmdServe(args []string) int {
 // stores); simulation uses in-memory stores. Only the Jira edge is real in live mode today (Phase 2
 // #1); the remaining edges use the deterministic sim adapters until their iterations, keeping the
 // platform fully functional at every step.
-func buildOrchestrator(cfg config.Config, mode string) (*orchestrator.Orchestrator, *controlplane.Server, error) {
+func buildOrchestrator(cfg config.Config, mode, claudeBin string) (*orchestrator.Orchestrator, *controlplane.Server, error) {
 	live := mode == "live"
 	l := enginehome.For(cfg.EngineHome, cfg.Project)
 	if err := l.Ensure(); err != nil {
@@ -159,6 +161,7 @@ func buildOrchestrator(cfg config.Config, mode string) (*orchestrator.Orchestrat
 		cleaner   orchestrator.Workspace                    // nil in simulation
 		liveJira  *jiraadapter.Adapter
 		gitA      *gitadapter.Adapter
+		worker    *runtimeadapter.Worker
 	)
 	if live {
 		email, token, err := jiraCreds(cfg)
@@ -172,9 +175,14 @@ func buildOrchestrator(cfg config.Config, mode string) (*orchestrator.Orchestrat
 		if err != nil {
 			return nil, nil, fmt.Errorf("live mode git: %w", err)
 		}
-		devPort = gitadapter.NewDeveloper(gitA, &sim.Developer{}) // real Git workspace + commit; sim reasoning
-		mergePort = gitadapter.NewMerger(gitA)                    // real --no-ff merge
-		cleaner = gitA                                            // real worktree/branch cleanup on terminal
+		// Real Worker Runtime (Claude Code), executing under the Resource-Manager-selected account.
+		worker = runtimeadapter.New(claudeBin, accountsFrom(res))
+		worker.Cooldown = func(account string, d time.Duration) { res.Cooldown(account, time.Now().Add(d)) }
+		worker.OnMetrics = func(m runtimeadapter.Metrics) { cp.Bus().Publish("RuntimeMetrics", "runtime", m) }
+
+		devPort = gitadapter.NewDeveloper(gitA, worker) // real Git workspace + REAL Claude worker
+		mergePort = gitadapter.NewMerger(gitA)          // real --no-ff merge
+		cleaner = gitA                                  // real worktree/branch cleanup on terminal
 	}
 
 	o := orchestrator.New(&orchestrator.Orchestrator{
@@ -203,7 +211,21 @@ func buildOrchestrator(cfg config.Config, mode string) (*orchestrator.Orchestrat
 		cp.Query("git.worktrees", func(ctx context.Context, _ url.Values) (any, error) { return gitA.Worktrees(ctx) })
 		cp.Query("git.status", func(ctx context.Context, _ url.Values) (any, error) { return gitA.Status(ctx) })
 	}
+	// Live Worker Runtime state → Control Plane (active executions, accounts, cooldowns, failover).
+	if worker != nil {
+		cp.Query("runtime.state", func(context.Context, url.Values) (any, error) { return worker.Snapshot(), nil })
+	}
 	return o, cp, nil
+}
+
+// accountsFrom maps the Resource Manager's Claude-account resources to executable runtime accounts.
+// The mapping only carries execution config (config dir label); the Resource Manager still SELECTS.
+func accountsFrom(res *resource.Manager) map[string]runtimeadapter.Account {
+	out := map[string]runtimeadapter.Account{}
+	for _, r := range res.List(resource.Filter{Kind: resource.KindClaudeAccount}) {
+		out[r.ID] = runtimeadapter.Account{ID: r.ID, ConfigDir: r.Labels["claude_config_dir"], Model: r.Labels["model"]}
+	}
+	return out
 }
 
 // buildGit prepares the engine's dedicated clone and returns the real Git adapter. The clone lives

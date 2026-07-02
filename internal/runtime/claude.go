@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -20,6 +21,8 @@ import (
 type ClaudeWorkerRuntime struct {
 	Bin  string   // provider binary; default "claude"
 	Args []string // extra args; default ["-p","--output-format","json"] (prompt arrives on stdin)
+	Dir  string   // working directory for the process (the assignment worktree); "" = inherit
+	Env  []string // extra environment (e.g. CLAUDE_CONFIG_DIR for the selected account); appended to os.Environ
 }
 
 // Name identifies the provider.
@@ -44,6 +47,12 @@ func (w ClaudeWorkerRuntime) Run(ctx context.Context, in assignment.WorkerInput)
 
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Stdin = strings.NewReader(prompt)
+	if w.Dir != "" {
+		cmd.Dir = w.Dir // run inside the assignment worktree (the CLI edits files in place)
+	}
+	if len(w.Env) > 0 {
+		cmd.Env = append(os.Environ(), w.Env...) // account-specific env (e.g. CLAUDE_CONFIG_DIR)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
