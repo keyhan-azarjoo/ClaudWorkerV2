@@ -19,6 +19,7 @@ type Layout struct {
 	KnowledgeDB string // <project>/knowledge.db      (Knowledge Brain — persistent)
 	KnowledgeMD string // <project>/knowledge/         (architecture.md, decisions/, ...)
 	StateDB     string // <project>/state.db           (Execution State — temporary)
+	Assignments string // <project>/assignments/       (S2 minimal Assignment store; emerges into state.db, S3)
 	Worktrees   string // <project>/worktrees/
 	Artifacts   string // <project>/artifacts/
 	Logs        string // <engine_home>/logs/
@@ -34,6 +35,7 @@ func For(engineHome, project string) Layout {
 		KnowledgeDB: filepath.Join(proj, "knowledge.db"),
 		KnowledgeMD: filepath.Join(proj, "knowledge"),
 		StateDB:     filepath.Join(proj, "state.db"),
+		Assignments: filepath.Join(proj, "assignments"),
 		Worktrees:   filepath.Join(proj, "worktrees"),
 		Artifacts:   filepath.Join(proj, "artifacts"),
 		Logs:        filepath.Join(engineHome, "logs"),
@@ -48,6 +50,7 @@ func (l Layout) dirs() []string {
 		l.ProjectDir,
 		l.KnowledgeMD,
 		filepath.Join(l.KnowledgeMD, "decisions"),
+		l.Assignments,
 		l.Worktrees,
 		l.Artifacts,
 		l.Logs,

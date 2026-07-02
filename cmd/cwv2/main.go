@@ -47,6 +47,8 @@ func run(args []string) int {
 		return cmdGit(args[1:])
 	case "jira":
 		return cmdJira(args[1:])
+	case "assignment":
+		return cmdAssignment(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return 0
@@ -66,9 +68,11 @@ usage:
   cwv2 doctor --config <cwv2.yaml> [--json]
   cwv2 git    <subcommand> --repo <path> ...      (deterministic Git toolbelt; JSON output)
   cwv2 jira   <subcommand> --config <cwv2.yaml> ... (deterministic Jira toolbelt; JSON output)
+  cwv2 assignment list --config <cwv2.yaml>       (inspect the Assignment store)
 
-  cwv2 git    help
-  cwv2 jira   help
+  cwv2 git        help
+  cwv2 jira       help
+  cwv2 assignment help
 `)
 }
 

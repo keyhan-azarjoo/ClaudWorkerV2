@@ -22,7 +22,7 @@ is implemented in **Go** so no tokens are ever spent on work a program can do.
 | Repo created (`myotgo/ClaudWorkerV2`, private) | ✅ |
 | Architecture docs (`docs/00`–`docs/22` + review) | ✅ complete |
 | Architecture frozen | 🧊 **v2.1.0** (2026-07-02; ACP-0001) |
-| Implementation | ▶️ **S0–S1 complete** (foundations + deterministic Git/Jira toolbelt + CLI) — next: **S2 Assignment Engine** (walking skeleton) |
+| Implementation | ▶️ **S0–S2 complete** (foundations + Git/Jira toolbelt + **Assignment Engine walking skeleton**) — S3 (emergent `state.db`) next. See [S2 report](docs/reports/S2_REPORT.md). |
 
 ### Build & run (S0–S1)
 
