@@ -4,10 +4,27 @@ Date: 2026-07-02. Goal: complete the transition from Simulation to fully operati
 
 ## Headline
 
-Every **technical** blocker to Live Mode has been removed and Live Mode has been **run and verified
-end-to-end on the Mac** (the only place Claude may run, per the `no-cloud-remote-claude` /
-`keep-everything-local` rules). One real bug was found and fixed. What remains are **owner decisions /
-external actions**, not engineering gaps.
+**Live Mode is ACTIVE. https://agents.myotgo.com now serves the live ClaudWorker V2 runtime** (Mac,
+authenticated), replacing the Simulation container. One real blocker was found and fixed. The owner
+chose: serve live via the Mac runtime + reverse tunnel (V1's topology), and keep the work-loop idle
+(no autonomous production deploys until tickets are labelled `ready`). Claude runs locally per the
+`no-cloud-remote-claude` / `keep-everything-local` rules.
+
+## Final live topology (as deployed)
+
+- **Runtime:** `cwv2 serve --mode live` on the Mac (launchd `com.myotgo.cwv2-live`, KeepAlive), bound
+  to `127.0.0.1:8787`, Control Plane authenticated with a 32-byte token
+  (`~/.cw-live/secrets/controlplane.token`, 600 — not in git).
+- **Exposure:** reverse tunnel (launchd `com.myotgo.agents-tunnel`, self-healing) forwards prod-host
+  `172.18.0.1:9787 → Mac 127.0.0.1:8787`; Caddy `agents.myotgo.com → reverse_proxy 172.18.0.1:9787`.
+- **Secrets:** Jira email/token + GitHub token injected from the existing bridge-secrets reference
+  into `~/.cw-live/secrets/live.env` (600, outside `~/Documents` so launchd/TCC can read it — the same
+  reason V1's tunnel lived outside Documents). Config uses secret **names**; no secret is in git.
+- **Repo:** backend clone seeded locally at `~/.cw-live/home/.../repos/backend` (origin = the real
+  GitHub URL), so startup does not network-clone 2.3 GB.
+- **Simulation container** on the VPS is **stopped** (kept for rollback) — no Simulation active in prod.
+- Public verification: `/` 200 (title "ClaudWorker V2 — Operations Console"), `/v1/status` 401 without
+  token, live queries authenticated (real Jira queue, 10-account pool, live git.status).
 
 ## Blocker found & fixed (real)
 
@@ -55,25 +72,32 @@ run on a production ticket** was **not** triggered, for two honest reasons:
 ## Answers
 
 - **Is ClaudWorker V2 now fully operational?**
-  **Technically yes.** Live Mode runs, every subsystem is verified against real Jira/Git/Claude, and
-  the one real blocker (Jira search API) is fixed. It is ready to process work.
+  **Yes.** Live Mode is running and serving at https://agents.myotgo.com; every subsystem is verified
+  against real Jira/Git/Claude; the one real blocker (Jira search API) is fixed. It is idle **by the
+  owner's choice** (empty `ready` queue), ready to work the moment a ticket is labelled `ready`.
 
 - **Is Simulation Mode no longer required for production?**
-  Correct — Simulation is no longer *required*. It remains available as a safe demo/testing mode. The
-  public URL currently still *serves* Simulation only because switching it to live data requires the
-  topology decision below.
+  Correct — Simulation is no longer required and is **no longer running** in production (the VPS sim
+  container is stopped, kept only for rollback). Simulation remains available as a safe local
+  demo/test mode.
 
 - **Are there any remaining external blockers?**
-  Yes — all **owner actions**, none technical:
-  1. **Serving topology for live at agents.myotgo.com.** Claude must run locally (Mac), so live data
-     at the public URL means the Mac runtime exposed via the existing reverse-tunnel → Caddy (V1's
-     proven topology). This re-introduces a dependency on this Mac being up. Decision: adopt that, or
-     keep the robust VPS container for the UI and run the live runtime privately.
-  2. **Authorize autonomous production deploys.** Label real SCRUM tickets `ready` and confirm the
-     platform may autonomously merge→push→auto-deploy to the production backend (`no-solo-deploy`).
-     Until then the live loop idles safely.
-  3. (Optional) Provision the Jira secrets into Azure Key Vault / keychain for a credential-manager
-     path instead of the env injection used here.
+  No technical blockers remain. The only outstanding items are **owner actions**, by the owner's own
+  choice:
+  1. **Feed work / authorize autonomous deploys** — label SCRUM tickets `ready` (owner chose "keep
+     idle"). A real backend merge→push auto-deploys, so this stays owner-gated (`no-solo-deploy`).
+  2. **Availability** — the public URL now depends on this Mac + tunnel (V1's topology, owner-chosen);
+     if the Mac is off, agents.myotgo.com 502s (rollback: repoint Caddy to the sim container).
+  3. **Worker trust** — first real worker run needs the Claude workspace "trusted"
+     (`hasTrustDialogAccepted`) for the account config dirs; harmless while idle.
+  4. (Optional) move the Jira/GitHub secrets into Azure Key Vault / keychain instead of the
+     `live.env` file.
+
+## Rollback
+
+- Repoint Caddy: `cp /opt/myotgo/Caddyfile.bak.pre-live-* /opt/myotgo/Caddyfile`, `docker start cwv2`,
+  restart caddy → back to the Simulation container.
+- Stop live runtime: `launchctl bootout gui/$(id -u)/com.myotgo.cwv2-live` (+ `com.myotgo.agents-tunnel`).
 
 ## How to switch on (once the owner decides)
 
