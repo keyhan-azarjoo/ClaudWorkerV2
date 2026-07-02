@@ -187,6 +187,60 @@ func (c *credHealth) validateJira(ctx context.Context) (bool, string) {
 	return true, "authenticated"
 }
 
+// projectKeyFromJQL extracts the project key from a `project = KEY ...` JQL, defaulting to SCRUM.
+func projectKeyFromJQL(jql string) string {
+	low := strings.ToLower(jql)
+	i := strings.Index(low, "project")
+	if i < 0 {
+		return "SCRUM"
+	}
+	rest := jql[i+len("project"):]
+	rest = strings.TrimLeft(rest, " =\t")
+	end := strings.IndexAny(rest, " \t\n")
+	if end < 0 {
+		end = len(rest)
+	}
+	key := strings.Trim(rest[:end], `"'`)
+	if key == "" {
+		return "SCRUM"
+	}
+	return key
+}
+
+// jiraBacklog returns the open board for the project (not just ready-to-work), so the console shows
+// the real tasks. Read-only; no secret in the result.
+func jiraBacklog(ctx context.Context, cli *jira.Client, projectKey string) (any, error) {
+	if cli == nil {
+		return []any{}, nil
+	}
+	if projectKey == "" {
+		projectKey = "SCRUM"
+	}
+	jql := fmt.Sprintf(`project = %s AND statusCategory != Done AND status not in (Cancel, Cancelled, Canceled) ORDER BY updated DESC`, projectKey)
+	res, err := cli.Search(ctx, jql, []string{"summary", "status", "priority", "labels"}, 50)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(res.Issues))
+	for _, iss := range res.Issues {
+		prio := ""
+		if iss.Fields.Priority != nil {
+			prio = iss.Fields.Priority.Name
+		}
+		ready := false
+		for _, l := range iss.Fields.Labels {
+			if l == "ready" {
+				ready = true
+			}
+		}
+		out = append(out, map[string]any{
+			"key": iss.Key, "summary": iss.Fields.Summary, "status": iss.Fields.Status.Name,
+			"priority": prio, "labels": iss.Fields.Labels, "ready": ready,
+		})
+	}
+	return out, nil
+}
+
 // validateGitHub checks the token against the GitHub API. Only the HTTP result is reported.
 func validateGitHub(ctx context.Context) (bool, string) {
 	tok := os.Getenv("GITHUB_TOKEN")

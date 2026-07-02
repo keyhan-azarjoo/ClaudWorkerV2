@@ -45,8 +45,8 @@ export default {
         onClick: async () => {
           validateBtn.textContent = "Validating…";
           try {
-            const res = await api.command("credentials.validate");
-            await draw(res && res.data);
+            const res = await api.command("credentials.validate"); // api unwraps to data
+            await draw(res);
           } catch (e) {
             body.prepend(el("div", { class: "notice danger" }, "Validation failed: " + (e && e.message ? e.message : e)));
           }
@@ -82,8 +82,8 @@ export default {
     }
 
     try {
-      const res = await api.query("credentials.health");
-      await draw(res && res.data);
+      const res = await api.query("credentials.health"); // api unwraps to data
+      await draw(res);
     } catch (e) {
       body.replaceChildren(el("div", { class: "notice danger" }, "Failed to load credential health: " + (e && e.message ? e.message : e)));
     }
