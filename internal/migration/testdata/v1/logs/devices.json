@@ -1,0 +1,7 @@
+[
+  {"name":"Android (Galaxy A6)","kind":"real","type":"android","reach":"192.168.55.190 / adb","inUse":true},
+  {"name":"iPhone (real)","kind":"real","type":"ios","reach":"00008120 / WDA","inUse":false},
+  {"name":"ESP32 #1","kind":"real","type":"esp","reach":"/dev/cu.usbmodem1","inUse":false},
+  {"name":"Windows PC","kind":"real","type":"pc","reach":"192.168.55.52","inUse":false},
+  {"name":"Modem (Tenda)","kind":"real","type":"modem","reach":"192.168.1.1","inUse":false}
+]
