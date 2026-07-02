@@ -26,8 +26,9 @@ import (
 // by the runtime.
 type Account struct {
 	ID        string
-	ConfigDir string   // CLAUDE_CONFIG_DIR for this account (account isolation)
-	Model     string   // optional --model
+	ConfigDir string   // CLAUDE_CONFIG_DIR (claude) or CODEX_HOME (codex) for this account
+	Model     string   // optional --model (claude)
+	Engine    string   // "claude" (default) | "codex" — selects the CLI to run
 	Env       []string // extra environment
 }
 
@@ -99,11 +100,19 @@ func (w *Worker) clock() func() time.Time {
 // infrastructure failures are retried here; other classes return to the caller (→ Policy Engine).
 func (w *Worker) Develop(ctx context.Context, worktree string, in orchestrator.DevInput) (orchestrator.DevResult, error) {
 	acct := w.Accounts[in.Account] // zero Account (default env) if unknown/empty
-	rt := runtime.ClaudeWorkerRuntime{Bin: w.Bin, Dir: worktree, Env: accountEnv(acct)}
-	if acct.Model != "" {
-		// Mirror defaultClaudeArgs + pin the account's model. --permission-mode acceptEdits is required
-		// for autonomous file edits in headless -p mode (see runtime.defaultClaudeArgs).
-		rt.Args = []string{"-p", "--output-format", "json", "--permission-mode", "acceptEdits", "--model", acct.Model}
+
+	// Engine routing: codex accounts run the Codex CLI; everything else runs Claude Code.
+	var rt runtime.WorkerRuntime
+	if acct.Engine == "codex" {
+		rt = runtime.CodexWorkerRuntime{Bin: "codex", Dir: worktree, Env: codexEnv(acct)}
+	} else {
+		crt := runtime.ClaudeWorkerRuntime{Bin: w.Bin, Dir: worktree, Env: accountEnv(acct)}
+		if acct.Model != "" {
+			// Mirror defaultClaudeArgs + pin the account's model. --permission-mode acceptEdits is required
+			// for autonomous file edits in headless -p mode (see runtime.defaultClaudeArgs).
+			crt.Args = []string{"-p", "--output-format", "json", "--permission-mode", "acceptEdits", "--model", acct.Model}
+		}
+		rt = crt
 	}
 	wi := assignment.WorkerInput{
 		IssueKey:           in.Issue,
@@ -221,6 +230,16 @@ func accountEnv(a Account) []string {
 	var env []string
 	if a.ConfigDir != "" {
 		env = append(env, "CLAUDE_CONFIG_DIR="+a.ConfigDir)
+	}
+	env = append(env, a.Env...)
+	return env
+}
+
+// codexEnv pins the Codex account profile via CODEX_HOME (account isolation).
+func codexEnv(a Account) []string {
+	var env []string
+	if a.ConfigDir != "" {
+		env = append(env, "CODEX_HOME="+a.ConfigDir)
 	}
 	env = append(env, a.Env...)
 	return env

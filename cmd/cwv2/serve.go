@@ -284,22 +284,25 @@ func discoverLiveFleet(res *resource.Manager, accts []config.Account) {
 		discovery.Adb{},
 		discovery.Simctl{},
 		discovery.Serial{},
-		discovery.Accounts{Kind: resource.KindClaudeAccount, Dirs: accountDirs(accts)},
+	}
+	if len(accts) == 0 {
+		// No configured accounts → fall back to auto-discovering ~/.cw-accounts (Claude only).
+		comp = append(comp, discovery.Accounts{Kind: resource.KindClaudeAccount, Dirs: defaultClaudeDirs()})
 	}
 	_ = res.Discover(comp) // best-effort; never fatal
+	// Configured accounts are registered directly so each carries its own ENGINE (claude|codex),
+	// making both selectable + routable to the right CLI.
+	registerConfiguredAccounts(res, accts)
 }
 
-// accountDirs maps configured accounts (Claude engine only — V2 runs Claude) to name→config-dir. If
-// no accounts are configured it falls back to auto-discovering ~/.cw-accounts.
-func accountDirs(accts []config.Account) map[string]string {
-	if len(accts) == 0 {
-		return defaultClaudeDirs()
-	}
-	out := map[string]string{}
+// registerConfiguredAccounts registers each configured account (claude + codex) as a worker-account
+// resource with an engine label, so only known/working accounts appear and each routes to its CLI.
+func registerConfiguredAccounts(res *resource.Manager, accts []config.Account) {
 	home, _ := os.UserHomeDir()
 	for _, a := range accts {
-		if a.Engine != "" && a.Engine != "claude" {
-			continue // V2 executes Claude only; skip codex/other so they can't be selected and fail
+		engine := a.Engine
+		if engine == "" {
+			engine = "claude"
 		}
 		dir := a.ConfigDir
 		if strings.HasPrefix(dir, "~/") && home != "" {
@@ -309,9 +312,30 @@ func accountDirs(accts []config.Account) map[string]string {
 		if name == "" {
 			name = filepath.Base(dir)
 		}
-		out[name] = dir
+		health := resource.HealthHealthy
+		if dir != "" {
+			if _, err := os.Stat(dir); err != nil {
+				health = resource.HealthDown
+			}
+		}
+		res.Register(resource.Resource{
+			ID: "acct-" + accSlug(name), Kind: resource.KindClaudeAccount, Name: name, Health: health,
+			Labels: map[string]string{"engine": engine, "claude_config_dir": dir, "model": a.Model, "source": "config"},
+		})
 	}
-	return out
+}
+
+// accSlug lowercases a name to a stable resource-id suffix (letters/digits kept, others → '-').
+func accSlug(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // defaultClaudeDirs finds Claude account config dirs under the conventional locations.
@@ -341,7 +365,7 @@ func defaultClaudeDirs() map[string]string {
 func accountsFrom(res *resource.Manager) map[string]runtimeadapter.Account {
 	out := map[string]runtimeadapter.Account{}
 	for _, r := range res.List(resource.Filter{Kind: resource.KindClaudeAccount}) {
-		out[r.ID] = runtimeadapter.Account{ID: r.ID, ConfigDir: r.Labels["claude_config_dir"], Model: r.Labels["model"]}
+		out[r.ID] = runtimeadapter.Account{ID: r.ID, ConfigDir: r.Labels["claude_config_dir"], Model: r.Labels["model"], Engine: r.Labels["engine"]}
 	}
 	return out
 }

@@ -16,11 +16,11 @@ import (
 
 // runAssignment drives one claimed Assignment through the full pipeline, calling each subsystem in
 // turn. Resource usage is always Policy → Resource → Lease. Every transition publishes an event.
-func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignment, iss Issue) error {
+func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignment, iss Issue, preferredAccount string) error {
 	owner := a.IssueKey
 
 	// --- Acquire required leases (Policy → Resource → Lease) for a runtime resource ---
-	resID, ok, reason := o.acquireRuntime(ctx, owner)
+	resID, ok, reason := o.acquireRuntime(ctx, owner, preferredAccount)
 	if !ok {
 		return o.deferAssignment(ctx, a, iss, "runtime unavailable: "+reason)
 	}
@@ -101,14 +101,25 @@ func (o *Orchestrator) mergeAndClose(ctx context.Context, a *assignment.Assignme
 }
 
 // acquireRuntime enforces the mandated order: Policy (budget) → Resource (reserve) → Lease (acquire).
-func (o *Orchestrator) acquireRuntime(ctx context.Context, owner string) (string, bool, string) {
+// When preferred is set (operator picked an account), it reserves THAT account; if it is unavailable it
+// falls back to any available account so the task still runs.
+func (o *Orchestrator) acquireRuntime(ctx context.Context, owner, preferred string) (string, bool, string) {
 	// Policy: budget
 	bd := o.Policy.Budget.Decide(policy.BudgetInput{UsagePct: 0, UsageKnown: true})
 	if !bd.Allow {
 		return "", false, bd.Reason
 	}
-	// Resource: reserve a runtime/account resource
-	r, ok := o.Resources.Reserve(owner, resource.Filter{Kind: resource.KindClaudeAccount})
+	// Resource: reserve a runtime/account resource (the picked one first, else any available).
+	var (
+		r  *resource.Resource
+		ok bool
+	)
+	if preferred != "" {
+		r, ok = o.Resources.Reserve(owner, resource.Filter{Kind: resource.KindClaudeAccount, ID: preferred})
+	}
+	if !ok {
+		r, ok = o.Resources.Reserve(owner, resource.Filter{Kind: resource.KindClaudeAccount})
+	}
 	if !ok {
 		return "", false, "no available runtime resource"
 	}
