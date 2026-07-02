@@ -116,7 +116,7 @@ func BuildPrompt(in assignment.WorkerInput) string {
 	// directly AND spawn its own parallel subagents — the "several agents on one task, same branch" model.
 	b.WriteString("\n# Working style\n")
 	b.WriteString("You are working INSIDE this task's git worktree (your current directory). Make the real code changes directly here.\n")
-	b.WriteString("When the task is large or divisible, spawn MULTIPLE PARALLEL SUBAGENTS (the Task tool) — up to 10 — to work together on this ONE task on the SAME branch, to finish faster and more accurately. Give each subagent a DIFFERENT part / different files so they never edit the same file at once. For a small task, do it directly with one. Make sure the combined result is coherent and complete before finishing.\n")
+	b.WriteString("GO MAXIMALLY WIDE — the goal is to finish this task in 3–5 minutes. Immediately decompose it and spawn AS MANY PARALLEL SUBAGENTS (the Task tool) as it usefully splits into — up to 20 — to work together on this ONE task on the SAME branch, all at once. Give each subagent a DIFFERENT part / different files so they never edit the same file at the same time; launch them CONCURRENTLY (in a single batch), never one-by-one. Add more agents rather than doing work serially. Only use a single agent for a genuinely tiny change. After the subagents finish, quickly integrate + double-check the combined result is coherent, complete and correct, then finish.\n")
 
 	// Output contract: reply with ONE JSON object matching WorkerResult so response collection is
 	// deterministic. Edits are made directly in the worktree, so "files" may be empty even on success

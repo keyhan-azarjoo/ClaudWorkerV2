@@ -19,6 +19,24 @@ import (
 func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignment, iss Issue, preferredAccount string) error {
 	owner := a.IssueKey
 
+	// Double-launch guard: never run the SAME issue concurrently (e.g. two Run clicks / a manual Run
+	// racing the auto loop). The first execution holds the slot; any other returns immediately.
+	o.mu.Lock()
+	if o.inflight == nil {
+		o.inflight = map[string]bool{}
+	}
+	if o.inflight[iss.Key] {
+		o.mu.Unlock()
+		return nil // already running — do not start a second agent on this task
+	}
+	o.inflight[iss.Key] = true
+	o.mu.Unlock()
+	defer func() {
+		o.mu.Lock()
+		delete(o.inflight, iss.Key)
+		o.mu.Unlock()
+	}()
+
 	// --- Acquire required leases (Policy → Resource → Lease) for a runtime resource ---
 	resID, ok, reason := o.acquireRuntime(ctx, owner, preferredAccount)
 	if !ok {
