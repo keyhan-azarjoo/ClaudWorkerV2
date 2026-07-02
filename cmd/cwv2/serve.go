@@ -259,6 +259,11 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 	})
 	o.RegisterControlPlane()
 
+	// Stream each worker's live activity (thinking/doing/tool-use) into the per-task log for the console.
+	if worker != nil {
+		worker.OnLog = func(issue, line string) { o.AppendTaskLog(issue, line) }
+	}
+
 	// Live Jira page becomes real.
 	if liveJira != nil {
 		cp.Query("jira.queue", func(ctx context.Context, _ url.Values) (any, error) { return liveJira.Queue(ctx) })

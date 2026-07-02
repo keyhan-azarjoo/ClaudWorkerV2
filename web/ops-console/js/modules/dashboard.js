@@ -43,7 +43,60 @@ function taskBox(t, agentCount) {
 
   const body = el("div", { class: "task-actions" }, ...(rows.length ? rows : [el("span", { class: "task-detail" }, "No actions yet")]));
 
-  return el("div", { class: "task-box" }, head, nowLine, body);
+  return el(
+    "div",
+    { class: "task-box clickable", title: "Click to see live agent output", onClick: () => openTaskDrawer(t.issue) },
+    head,
+    nowLine,
+    body,
+    el("div", { class: "task-expand-hint" }, "▸ click to see what the agents are doing")
+  );
+}
+
+// openTaskDrawer expands a task into a full-screen panel streaming the agents' live output
+// (thinking / doing / tool-use / responses). Polls task.stream and auto-scrolls; close to stop.
+function openTaskDrawer(issue) {
+  const logEl = el("div", { class: "drawer-log" }, el("div", { class: "sub" }, "Waiting for agent output…"));
+  const closeBtn = el("button", { class: "btn" }, "✕ Close");
+  const overlay = el(
+    "div",
+    { class: "drawer-overlay" },
+    el(
+      "div",
+      { class: "drawer" },
+      el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent output"), closeBtn),
+      logEl
+    )
+  );
+  let stopped = false;
+  let atBottom = true;
+  logEl.addEventListener("scroll", () => {
+    atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+  });
+  async function poll() {
+    if (stopped) return;
+    try {
+      const res = await api.query("task.stream", { issue });
+      const lines = (res && res.lines) || [];
+      logEl.replaceChildren(
+        ...(lines.length ? lines.map((l) => el("div", { class: "drawer-line" }, l)) : [el("div", { class: "sub" }, "No agent output yet — the task may be starting.")])
+      );
+      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+    } catch (e) {
+      /* transient */
+    }
+    if (!stopped) setTimeout(poll, 1500);
+  }
+  const close = () => {
+    stopped = true;
+    overlay.remove();
+  };
+  closeBtn.onclick = close;
+  overlay.onclick = (e) => {
+    if (e.target === overlay) close();
+  };
+  document.body.append(overlay);
+  poll();
 }
 
 export default {

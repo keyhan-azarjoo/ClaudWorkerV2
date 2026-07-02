@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,37 +13,31 @@ import (
 	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
 )
 
-// ClaudeWorkerRuntime is the FIRST WorkerRuntime provider. It is intentionally tiny: build the prompt
-// (deterministically, via BuildPrompt), deliver it on the process stdin, exec the binary, collect
-// stdout, and parse the result. Everything else (retry/timeout/metrics/logging) is Runner's job, so a
-// future provider (Codex/GPT/Gemini/local) only needs to re-implement this thin exec+parse.
+// ClaudeWorkerRuntime is the FIRST WorkerRuntime provider. It builds the prompt (deterministically, via
+// BuildPrompt), delivers it on stdin, runs the CLI in the worktree, and parses the result. It streams
+// the CLI's output (stream-json) so the console can show what the agent is doing live (OnLine).
 //
 // It is stateless: no field survives a Run, so every execution starts clean (disposable, Law 4).
 type ClaudeWorkerRuntime struct {
-	Bin  string   // provider binary; default "claude"
-	Args []string // extra args; default defaultClaudeArgs (prompt arrives on stdin)
-	Dir  string   // working directory for the process (the assignment worktree); "" = inherit
-	Env  []string // extra environment (e.g. CLAUDE_CONFIG_DIR for the selected account); appended to os.Environ
-}
-
-// defaultClaudeArgs is the headless invocation. `--permission-mode acceptEdits` is REQUIRED for
-// autonomous operation: in `-p` (print) mode there is no interactive approver, so without it the CLI
-// refuses file-editing tools ("pending your permission approval to write it") and every assignment
-// produces zero changes. acceptEdits auto-accepts file edits (Write/Edit) — the least privilege that
-// lets the worker implement code — without the broader `--dangerously-skip-permissions` (which would
-// also allow arbitrary Bash). The worker runs in a disposable, isolated worktree (Law 4).
-func defaultClaudeArgs() []string {
-	return []string{"-p", "--output-format", "json", "--permission-mode", "acceptEdits"}
+	Bin    string       // provider binary; default "claude"
+	Args   []string     // extra args; default defaultClaudeArgs (prompt arrives on stdin)
+	Dir    string       // working directory for the process (the assignment worktree); "" = inherit
+	Env    []string     // extra environment (e.g. CLAUDE_CONFIG_DIR for the selected account)
+	OnLine func(string) // optional: called with each human-readable line as the worker streams
 }
 
 // Name identifies the provider.
 func (ClaudeWorkerRuntime) Name() string { return "claude" }
 
-// Run delivers the prompt on stdin and collects the completion from stdout. It honours ctx: a
-// deadline or cancellation kills the process (exec.CommandContext). A spawn error, non-zero exit, or
-// undecodable transport is returned as an error (transient/infra — Runner may retry). A process that
-// ran but produced output that does not satisfy the contract yields Result.OK=false with nil error (a
-// semantic failure the Assignment Engine handles).
+// defaultClaudeArgs is the headless invocation. stream-json (with --verbose) streams the agent's
+// activity live; --permission-mode acceptEdits is REQUIRED for autonomous file edits in -p mode.
+func defaultClaudeArgs() []string {
+	return []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"}
+}
+
+// Run streams the CLI. Each output line is a JSON event; assistant text + tool-use become live log
+// lines (OnLine), and the terminal "result" event carries the WorkerResult envelope (same contract as
+// before). ctx cancellation kills the process; a spawn error / non-zero exit is a (retryable) error.
 func (w ClaudeWorkerRuntime) Run(ctx context.Context, in assignment.WorkerInput) (Response, error) {
 	bin := w.Bin
 	if bin == "" {
@@ -63,23 +58,41 @@ func (w ClaudeWorkerRuntime) Run(ctx context.Context, in assignment.WorkerInput)
 	if len(w.Env) > 0 {
 		cmd.Env = append(os.Environ(), w.Env...) // account-specific env (e.g. CLAUDE_CONFIG_DIR)
 	}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return resp, fmt.Errorf("claude runtime: stdout pipe: %w", err)
+	}
+	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		return resp, fmt.Errorf("claude runtime: start %s: %w", bin, err)
+	}
+
+	var resultStr string
+	sc := bufio.NewScanner(stdoutPipe)
+	sc.Buffer(make([]byte, 64*1024), 16*1024*1024) // events (esp. final result) can be large
+	for sc.Scan() {
+		var ev map[string]any
+		if json.Unmarshal(sc.Bytes(), &ev) != nil {
+			continue // ignore non-JSON lines
+		}
+		if w.OnLine != nil {
+			for _, s := range logLinesFromEvent(ev) {
+				w.OnLine(s)
+			}
+		}
+		// The final "result" event (and the legacy {"result":...} envelope) carry the completion.
+		if r, ok := ev["result"].(string); ok {
+			resultStr = r
+		}
+	}
+	if err := cmd.Wait(); err != nil {
 		return resp, fmt.Errorf("claude runtime: exec %s: %w (stderr: %s)", bin, err, strings.TrimSpace(stderr.String()))
 	}
 
-	// claude --output-format json wraps the assistant text in an envelope {"result": "..."}.
-	var env struct {
-		Result string `json:"result"`
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
-		return resp, fmt.Errorf("claude runtime: decode envelope: %w", err)
-	}
-	completion := strings.TrimSpace(env.Result)
+	completion := strings.TrimSpace(resultStr)
 	resp.CompletionBytes = len(completion)
-
 	res, ok := parseResult(completion)
 	if !ok {
 		// The provider ran but did not return a contract-valid object — a semantic failure, not an
@@ -89,6 +102,37 @@ func (w ClaudeWorkerRuntime) Run(ctx context.Context, in assignment.WorkerInput)
 	}
 	resp.Result = res
 	return resp, nil
+}
+
+// logLinesFromEvent renders a stream-json event as human-readable activity ("thinking/doing") lines.
+func logLinesFromEvent(ev map[string]any) []string {
+	var out []string
+	switch ev["type"] {
+	case "assistant":
+		msg, _ := ev["message"].(map[string]any)
+		content, _ := msg["content"].([]any)
+		for _, c := range content {
+			m, _ := c.(map[string]any)
+			switch m["type"] {
+			case "text":
+				if s, _ := m["text"].(string); strings.TrimSpace(s) != "" {
+					out = append(out, strings.TrimSpace(s))
+				}
+			case "tool_use":
+				name, _ := m["name"].(string)
+				if name == "Task" {
+					out = append(out, "🤖 spawned a sub-agent")
+				} else if name != "" {
+					out = append(out, "🔧 "+name)
+				}
+			}
+		}
+	case "system":
+		if ev["subtype"] == "init" {
+			out = append(out, "▶ agent started")
+		}
+	}
+	return out
 }
 
 // parseResult extracts a WorkerResult from the completion text, tolerating a ```json fence. It returns

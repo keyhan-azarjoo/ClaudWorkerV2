@@ -69,6 +69,7 @@ type Worker struct {
 	CooldownFor     time.Duration                         // how long to cool a rate-limited/auth-failed account
 	Cooldown        func(account string, d time.Duration) // health signal → Resource Manager (optional)
 	OnMetrics       func(Metrics)                         // → Control Plane (optional)
+	OnLog           func(issue, line string)              // live agent activity → Control Plane (optional)
 	now             func() time.Time
 
 	mu       sync.Mutex
@@ -101,16 +102,22 @@ func (w *Worker) clock() func() time.Time {
 func (w *Worker) Develop(ctx context.Context, worktree string, in orchestrator.DevInput) (orchestrator.DevResult, error) {
 	acct := w.Accounts[in.Account] // zero Account (default env) if unknown/empty
 
+	// Live activity → Control Plane (per task), so the console can show what the agent is doing.
+	onLine := func(s string) {
+		if w.OnLog != nil {
+			w.OnLog(in.Issue, s)
+		}
+	}
 	// Engine routing: codex accounts run the Codex CLI; everything else runs Claude Code.
 	var rt runtime.WorkerRuntime
 	if acct.Engine == "codex" {
-		rt = runtime.CodexWorkerRuntime{Bin: "codex", Dir: worktree, Env: codexEnv(acct)}
+		rt = runtime.CodexWorkerRuntime{Bin: "codex", Dir: worktree, Env: codexEnv(acct), OnLine: onLine}
 	} else {
-		crt := runtime.ClaudeWorkerRuntime{Bin: w.Bin, Dir: worktree, Env: accountEnv(acct)}
+		crt := runtime.ClaudeWorkerRuntime{Bin: w.Bin, Dir: worktree, Env: accountEnv(acct), OnLine: onLine}
 		if acct.Model != "" {
-			// Mirror defaultClaudeArgs + pin the account's model. --permission-mode acceptEdits is required
-			// for autonomous file edits in headless -p mode (see runtime.defaultClaudeArgs).
-			crt.Args = []string{"-p", "--output-format", "json", "--permission-mode", "acceptEdits", "--model", acct.Model}
+			// Mirror defaultClaudeArgs (stream-json for live output + acceptEdits for autonomous edits)
+			// and pin the account's model.
+			crt.Args = []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits", "--model", acct.Model}
 		}
 		rt = crt
 	}

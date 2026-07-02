@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
 	"github.com/myotgo/ClaudWorkerV2/internal/controlplane"
@@ -60,11 +61,17 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 	o.recordAction(iss.Key, "develop", "running", "")
 	dev, err := o.Developer.Develop(ctx, DevInput{Issue: iss.Key, Summary: iss.Summary, AcceptanceCriteria: iss.AcceptanceCriteria, KnowledgeContext: kctx, Runtime: runtimeName, Account: resID})
 	o.emit(controlplane.EventRuntimeFinished, "runtime", map[string]any{"issue": iss.Key, "ok": err == nil && dev.OK, "changed": len(dev.ChangedFiles)})
+	// Only a real execution ERROR is a failure (red X). A worker that ran fine but produced no changes
+	// (nothing to do / already satisfied) is NOT a failure — that was showing a misleading red X.
 	devStatus := "done"
-	if err != nil || !dev.OK {
+	if err != nil {
 		devStatus = "failed"
 	}
-	o.recordAction(iss.Key, "develop", devStatus, fmt.Sprintf("%d file(s) changed", len(dev.ChangedFiles)))
+	detail := fmt.Sprintf("%d file(s) changed", len(dev.ChangedFiles))
+	if s := strings.TrimSpace(dev.Summary); s != "" {
+		detail = s + " · " + detail
+	}
+	o.recordAction(iss.Key, "develop", devStatus, detail)
 
 	// --- Verification + Improvement loop (S8 + S9), stop decided by the Policy Engine (S6) ---
 	a.State = assignment.StateQA

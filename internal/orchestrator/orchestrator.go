@@ -135,14 +135,15 @@ type Orchestrator struct {
 	now     func() time.Time
 	trigger chan struct{}
 
-	mu        sync.Mutex
-	counters  map[string]int
-	taskLog   map[string]*TaskActivity
-	inflight  map[string]bool  // issues currently executing — guards against double-launch
-	decisions []map[string]any // policy-decision ring for the Policies page
-	lastIssue string
-	running   bool // the serve loop goroutine is alive
-	active    bool // the loop is claiming/processing work (vs. attached-but-idle)
+	mu         sync.Mutex
+	counters   map[string]int
+	taskLog    map[string]*TaskActivity
+	taskStream map[string][]string // per-issue live agent activity lines (bounded)
+	inflight   map[string]bool     // issues currently executing — guards against double-launch
+	decisions  []map[string]any    // policy-decision ring for the Policies page
+	lastIssue  string
+	running    bool // the serve loop goroutine is alive
+	active     bool // the loop is claiming/processing work (vs. attached-but-idle)
 }
 
 // SetActive turns work processing on or off. Turning it on wakes the loop so it drains eligible work;
@@ -161,6 +162,28 @@ func (o *Orchestrator) IsActive() bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.active
+}
+
+// AppendTaskLog records one live activity line for a task (what the agent is thinking/doing), bounded
+// to the most recent 800 lines per task so the console can show the full transcript.
+func (o *Orchestrator) AppendTaskLog(issue, line string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.taskStream == nil {
+		o.taskStream = map[string][]string{}
+	}
+	s := append(o.taskStream[issue], line)
+	if len(s) > 800 {
+		s = s[len(s)-800:]
+	}
+	o.taskStream[issue] = s
+}
+
+// TaskStream returns the recorded live activity lines for a task (oldest first).
+func (o *Orchestrator) TaskStream(issue string) []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]string(nil), o.taskStream[issue]...)
 }
 
 // Option configures the Orchestrator.
