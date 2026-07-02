@@ -13,32 +13,34 @@ import (
 
 // Layout describes the on-disk paths for one project's engine home.
 type Layout struct {
-	Root        string // <engine_home>
-	EngineDB    string // <engine_home>/engine.db (engine-global; not created here)
-	ProjectDir  string // <engine_home>/projects/<project>
-	KnowledgeDB string // <project>/knowledge.db      (Knowledge Brain — persistent)
-	KnowledgeMD string // <project>/knowledge/         (architecture.md, decisions/, ...)
-	StateDB     string // <project>/state.db           (Execution State — temporary)
-	Assignments string // <project>/assignments/       (S2 minimal Assignment store; emerges into state.db, S3)
-	Worktrees   string // <project>/worktrees/
-	Artifacts   string // <project>/artifacts/
-	Logs        string // <engine_home>/logs/
+	Root             string // <engine_home>
+	EngineDB         string // <engine_home>/engine.db (engine-global; not created here)
+	ProjectDir       string // <engine_home>/projects/<project>
+	KnowledgeDB      string // <project>/knowledge.db      (Knowledge Brain — persistent)
+	KnowledgeMD      string // <project>/knowledge/         (architecture.md, decisions/, ...)
+	KnowledgeEntries string // <project>/knowledge/entries/ (append-only versioned entries — S4)
+	StateDB          string // <project>/state.db           (Execution State — temporary)
+	Assignments      string // <project>/assignments/       (S2 minimal Assignment store; emerges into state.db, S3)
+	Worktrees        string // <project>/worktrees/
+	Artifacts        string // <project>/artifacts/
+	Logs             string // <engine_home>/logs/
 }
 
 // For computes the layout for a project rooted at engineHome. It does not touch the filesystem.
 func For(engineHome, project string) Layout {
 	proj := filepath.Join(engineHome, "projects", project)
 	return Layout{
-		Root:        engineHome,
-		EngineDB:    filepath.Join(engineHome, "engine.db"),
-		ProjectDir:  proj,
-		KnowledgeDB: filepath.Join(proj, "knowledge.db"),
-		KnowledgeMD: filepath.Join(proj, "knowledge"),
-		StateDB:     filepath.Join(proj, "state.db"),
-		Assignments: filepath.Join(proj, "assignments"),
-		Worktrees:   filepath.Join(proj, "worktrees"),
-		Artifacts:   filepath.Join(proj, "artifacts"),
-		Logs:        filepath.Join(engineHome, "logs"),
+		Root:             engineHome,
+		EngineDB:         filepath.Join(engineHome, "engine.db"),
+		ProjectDir:       proj,
+		KnowledgeDB:      filepath.Join(proj, "knowledge.db"),
+		KnowledgeMD:      filepath.Join(proj, "knowledge"),
+		KnowledgeEntries: filepath.Join(proj, "knowledge", "entries"),
+		StateDB:          filepath.Join(proj, "state.db"),
+		Assignments:      filepath.Join(proj, "assignments"),
+		Worktrees:        filepath.Join(proj, "worktrees"),
+		Artifacts:        filepath.Join(proj, "artifacts"),
+		Logs:             filepath.Join(engineHome, "logs"),
 	}
 }
 
@@ -50,6 +52,7 @@ func (l Layout) dirs() []string {
 		l.ProjectDir,
 		l.KnowledgeMD,
 		filepath.Join(l.KnowledgeMD, "decisions"),
+		l.KnowledgeEntries,
 		l.Assignments,
 		l.Worktrees,
 		l.Artifacts,

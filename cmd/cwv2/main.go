@@ -21,7 +21,7 @@ import (
 )
 
 // SpecVersion is the architecture spec this binary targets (SPEC_VERSION.md).
-const SpecVersion = "2.0.0"
+const SpecVersion = "2.1.0"
 
 // Version is the binary build version (overridable at build time via -ldflags).
 var Version = "0.0.0-dev"
@@ -49,6 +49,8 @@ func run(args []string) int {
 		return cmdJira(args[1:])
 	case "assignment":
 		return cmdAssignment(args[1:])
+	case "knowledge":
+		return cmdKnowledge(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return 0
@@ -69,10 +71,12 @@ usage:
   cwv2 git    <subcommand> --repo <path> ...      (deterministic Git toolbelt; JSON output)
   cwv2 jira   <subcommand> --config <cwv2.yaml> ... (deterministic Jira toolbelt; JSON output)
   cwv2 assignment list --config <cwv2.yaml>       (inspect the Assignment store)
+  cwv2 knowledge  <subcommand> --config <cwv2.yaml> (Knowledge Brain; deterministic, zero tokens)
 
   cwv2 git        help
   cwv2 jira       help
   cwv2 assignment help
+  cwv2 knowledge  help
 `)
 }
 
