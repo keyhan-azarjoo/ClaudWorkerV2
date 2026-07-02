@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -19,6 +20,33 @@ func writeFakeClaude(t *testing.T, body string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// TestDefaultArgsEnableAutonomousEdits is a regression guard: in headless `-p` mode the CLI refuses
+// file-editing tools unless a non-interactive permission mode is set, so every assignment would
+// produce zero changes. The default invocation MUST carry `--permission-mode acceptEdits`.
+func TestDefaultArgsEnableAutonomousEdits(t *testing.T) {
+	got := defaultClaudeArgs()
+	joined := strings.Join(got, " ")
+	if !strings.Contains(joined, "-p") || !strings.Contains(joined, "--permission-mode acceptEdits") {
+		t.Fatalf("default claude args must include -p and --permission-mode acceptEdits; got %v", got)
+	}
+}
+
+// TestNilArgsUseDefaults verifies Run falls back to defaultClaudeArgs (with the permission mode) when
+// Args is nil, by capturing the args the process actually received.
+func TestNilArgsUseDefaults(t *testing.T) {
+	argFile := filepath.Join(t.TempDir(), "args.txt")
+	inner := `{\"ok\":true,\"summary\":\"s\",\"files\":[]}`
+	bin := writeFakeClaude(t, `echo "$@" > `+argFile+`; cat >/dev/null; printf '%s' '{"result":"`+inner+`"}'`)
+	w := ClaudeWorkerRuntime{Bin: bin} // Args nil -> defaults
+	if _, err := w.Run(context.Background(), sampleInput()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	rec, _ := os.ReadFile(argFile)
+	if !strings.Contains(string(rec), "--permission-mode acceptEdits") {
+		t.Fatalf("process did not receive acceptEdits; got %q", strings.TrimSpace(string(rec)))
+	}
 }
 
 func TestClaudeRuntimeSuccess(t *testing.T) {
