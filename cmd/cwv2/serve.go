@@ -334,6 +334,44 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 		worker.OnTokensDone = func(issue string, in, out int) { o.BankTaskTokens(issue, in, out) }
 	}
 
+	// Standing RULES (Rules page): operator-defined rules injected into EVERY agent's prompt so the main
+	// agent reads them before any change (e.g. cross-platform UI parity). Editable/toggle/delete.
+	if l.ProjectDir != "" {
+		rules := newRuleStore(l.ProjectDir)
+		o.Rules = rules.activeTexts
+		cp.Query("rules.list", func(context.Context, url.Values) (any, error) { return rules.load(), nil })
+		cp.Command("rules.add", func(_ context.Context, body []byte) (any, error) {
+			var r struct{ Title, Text string }
+			_ = json.Unmarshal(body, &r)
+			return rules.add(r.Title, r.Text)
+		})
+		cp.Command("rules.update", func(_ context.Context, body []byte) (any, error) {
+			var r struct {
+				ID     string `json:"id"`
+				Title  string `json:"title"`
+				Text   string `json:"text"`
+				Active bool   `json:"active"`
+			}
+			_ = json.Unmarshal(body, &r)
+			return rules.update(r.ID, r.Title, r.Text, r.Active), nil
+		})
+		cp.Command("rules.setActive", func(_ context.Context, body []byte) (any, error) {
+			var r struct {
+				ID     string `json:"id"`
+				Active bool   `json:"active"`
+			}
+			_ = json.Unmarshal(body, &r)
+			return rules.setActive(r.ID, r.Active), nil
+		})
+		cp.Command("rules.remove", func(_ context.Context, body []byte) (any, error) {
+			var r struct {
+				ID string `json:"id"`
+			}
+			_ = json.Unmarshal(body, &r)
+			return rules.remove(r.ID), nil
+		})
+	}
+
 	// Repositories (Git page): the project's managed repos with active/inactive state + org discovery.
 	// Deactivating EVERY repo turns the project OFF — the work gate then refuses all agent work.
 	if live && l.ProjectDir != "" {

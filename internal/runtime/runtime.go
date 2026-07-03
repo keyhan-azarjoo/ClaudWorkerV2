@@ -22,6 +22,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
@@ -96,6 +97,17 @@ func BuildPrompt(in assignment.WorkerInput) string {
 	b.WriteString("\n\n# Acceptance Criteria\n")
 	b.WriteString(strings.TrimRight(in.AcceptanceCriteria, "\n"))
 	b.WriteString("\n")
+
+	// Standing RULES — read and obey BEFORE making any change. These are operator-defined and apply to
+	// every task (e.g. cross-platform UI parity: change the app, website, hub and all OSes together).
+	if len(in.Rules) > 0 {
+		b.WriteString("\n# RULES — read FIRST, obey before ANY change (operator-mandated)\n")
+		for i, r := range in.Rules {
+			if s := strings.TrimSpace(r); s != "" {
+				fmt.Fprintf(&b, "%d. %s\n", i+1, s)
+			}
+		}
+	}
 
 	if strings.TrimSpace(in.KnowledgeContext) != "" {
 		b.WriteString("\n")

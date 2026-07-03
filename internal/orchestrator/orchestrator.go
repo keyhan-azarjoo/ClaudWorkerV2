@@ -53,7 +53,8 @@ type Jira interface {
 // the runtime still never CHOOSES the account.
 type DevInput struct {
 	Issue, Summary, AcceptanceCriteria, KnowledgeContext, Runtime, Account string
-	OperatorNote                                                           string // human guidance from a manual Continue
+	OperatorNote                                                           string   // human guidance from a manual Continue
+	Rules                                                                  []string // standing rules every agent must follow
 }
 
 // DevResult is a worker outcome (files changed). Real impl wraps runtime.Runner; tests fake it.
@@ -148,6 +149,10 @@ type Orchestrator struct {
 	// nil = always allowed.
 	WorkAllowed func() (bool, string)
 
+	// Rules optionally supplies the standing rules every agent must obey (injected into the prompt so the
+	// main agent reads them before any change). nil = no extra rules.
+	Rules func() []string
+
 	now     func() time.Time
 	trigger chan struct{}
 
@@ -173,6 +178,14 @@ func (o *Orchestrator) SetActive(a bool) {
 	if a {
 		o.Notify()
 	}
+}
+
+// activeRules returns the standing rules to inject into the worker prompt (nil-safe).
+func (o *Orchestrator) activeRules() []string {
+	if o.Rules != nil {
+		return o.Rules()
+	}
+	return nil
 }
 
 // IsActive reports whether the loop is currently processing work.
