@@ -5,7 +5,7 @@ Artifacts to run ClaudWorker V2 in production. All keep **Simulation Mode** avai
 | File | Platform | Notes |
 |---|---|---|
 | `Dockerfile` + `docker-compose.yml` | container | distroless non-root; `/data` = engine home; healthcheck; graceful stop |
-| `launchd/com.myotgo.cwv2.plist` | macOS | `KeepAlive` = auto-recovery; 30s graceful exit |
+| `launchd/com.example.cwv2.plist` | macOS | `KeepAlive` = auto-recovery; 30s graceful exit |
 | `systemd/cwv2.service` | Linux | `ExecStartPre` validates config; `Restart=on-failure`; SIGTERM graceful |
 | `windows/install-service.ps1` | Windows | SCM service; `sc failure` = auto-restart; validates config first |
 | `logrotate/cwv2` | Linux/macOS | daily rotation, keep 14, compress |

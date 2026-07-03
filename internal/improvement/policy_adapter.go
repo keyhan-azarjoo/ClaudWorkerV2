@@ -1,8 +1,8 @@
 package improvement
 
 import (
-	"github.com/myotgo/ClaudWorkerV2/internal/policy"
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	"claudworker/internal/policy"
+	"claudworker/internal/verify"
 )
 
 // PolicyDecider adapts the S6 Policy Engine's FailurePolicy to the StopDecider port, so the loop's

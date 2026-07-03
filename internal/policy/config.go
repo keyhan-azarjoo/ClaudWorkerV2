@@ -1,6 +1,6 @@
 package policy
 
-import "github.com/myotgo/ClaudWorkerV2/internal/config"
+import "claudworker/internal/config"
 
 // Config is the Policy Engine's own configuration — one sub-config per policy. It is independent of
 // the app config type so policies stay testable in isolation; FromConfig maps the frozen

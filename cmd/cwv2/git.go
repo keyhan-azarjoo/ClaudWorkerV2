@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/git"
-	"github.com/myotgo/ClaudWorkerV2/internal/logging"
+	"claudworker/internal/git"
+	"claudworker/internal/logging"
 )
 
 // emit prints v as indented JSON to stdout (machine-readable; never text for AI parsing).

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/lease"
+	"claudworker/internal/lease"
 )
 
 func steady() func() time.Time {

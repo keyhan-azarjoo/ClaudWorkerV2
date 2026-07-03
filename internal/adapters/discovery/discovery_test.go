@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
+	"claudworker/internal/resource"
 )
 
 func fakeGet(body string) HTTPGetter {
@@ -15,18 +15,18 @@ func fakeRun(out string) CmdRunner {
 }
 
 func TestAccountsDiscovery(t *testing.T) {
-	a := Accounts{Kind: resource.KindClaudeAccount, Dirs: map[string]string{"MyOTGO": "/exists", "Gone": "/nope"},
+	a := Accounts{Kind: resource.KindClaudeAccount, Dirs: map[string]string{"Main": "/exists", "Gone": "/nope"},
 		Stat: func(p string) bool { return p == "/exists" }}
 	rs, _ := a.Discover()
 	byName := map[string]resource.Resource{}
 	for _, r := range rs {
 		byName[r.Name] = r
 	}
-	if byName["MyOTGO"].Health != resource.HealthHealthy || byName["Gone"].Health != resource.HealthDown {
+	if byName["Main"].Health != resource.HealthHealthy || byName["Gone"].Health != resource.HealthDown {
 		t.Errorf("account health = %+v", byName)
 	}
-	if byName["MyOTGO"].Kind != resource.KindClaudeAccount || byName["MyOTGO"].Labels["engine"] != "claude" {
-		t.Errorf("account mapping = %+v", byName["MyOTGO"])
+	if byName["Main"].Kind != resource.KindClaudeAccount || byName["Main"].Labels["engine"] != "claude" {
+		t.Errorf("account mapping = %+v", byName["Main"])
 	}
 }
 

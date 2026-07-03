@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
-	"github.com/myotgo/ClaudWorkerV2/internal/enginehome"
-	"github.com/myotgo/ClaudWorkerV2/internal/knowledge"
+	"claudworker/internal/config"
+	"claudworker/internal/enginehome"
+	"claudworker/internal/knowledge"
 )
 
 func knowledgeUsage() {

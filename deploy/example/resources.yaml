@@ -1,12 +1,12 @@
-# MyOTGO fleet — resource + account mapping + discovery (from V1 migration).
+# Example fleet — resource + account mapping + discovery (from V1 migration).
 # Discovery auto-finds accounts (~/.cw-accounts/*, ~/.claude), local providers (Ollama :11434,
 # LM Studio :1234), and devices (adb/simctl/serial). Declared infra below is added on top.
 
 accounts:                # Claude / Codex accounts (config dirs are references; creds stay in Keychain)
-  - id: MyOTGO        ; engine: claude ; config_dir: ~/.cw-accounts/myotgo
+  - id: Example        ; engine: claude ; config_dir: ~/.cw-accounts/example
   - id: SOT-Claud     ; engine: claude ; config_dir: ~/.cw-accounts/sot-claud
   - id: SPT-Codex     ; engine: codex  ; config_dir: ~/.codex/spt
-  - id: MyOTGO-Codex  ; engine: codex  ; config_dir: ~/.codex/myotgo
+  - id: Example-Codex  ; engine: codex  ; config_dir: ~/.codex/example
 
 local_providers:
   - id: ollama    ; base_url: http://127.0.0.1:11434

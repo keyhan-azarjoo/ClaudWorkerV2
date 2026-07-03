@@ -12,9 +12,9 @@ import (
 	"os/exec"
 	"sort"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
-	"github.com/myotgo/ClaudWorkerV2/internal/enginehome"
-	"github.com/myotgo/ClaudWorkerV2/internal/secrets"
+	"claudworker/internal/config"
+	"claudworker/internal/enginehome"
+	"claudworker/internal/secrets"
 )
 
 // Status is a check outcome.

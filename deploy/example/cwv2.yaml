@@ -1,8 +1,8 @@
-# ClaudWorker V2 — MyOTGO production config.
+# ClaudWorker V2 — Example production config.
 # READY TO RUN once the secret NAMES below resolve (Keychain / Azure KV / env). No values here.
-# Validate: cwv2 validate --config deploy/myotgo/cwv2.yaml
+# Validate: cwv2 validate --config deploy/example/cwv2.yaml
 
-project: myotgo
+project: example
 engine_home: /var/lib/cwv2            # persistent volume; holds durable state (knowledge/assignments/leases)
 
 github:
@@ -14,7 +14,7 @@ github:
 # Repositories the platform works on. Pilot ONE first (recommend the backend). Real remotes below.
 # Per-repo build/verify commands are in VERIFICATION_PLAN.md; pass them to serve via --build-cmd etc.
 repos:
-  - name: backend            # PILOT — build: dotnet build ; verify: dotnet test ; api: https://api.myotgo.com/health
+  - name: backend            # PILOT — build: dotnet build ; verify: dotnet test ; api: https://api.example.com/health
     url: https://github.com/keyhan-azarjoo/DotNet-IoT-MainWebApi.git
     dev_branch: development
     plugin: generic
@@ -26,27 +26,27 @@ repos:
 # Worker accounts (V2 runs Claude only). Listing them REPLACES ~/.cw-accounts auto-discovery,
 # so only these known/working accounts are registered (avoids selecting a broken login).
 accounts:
-  - { name: MyOTGO, config_dir: ~/.cw-accounts/myotgo }
+  - { name: Example, config_dir: ~/.cw-accounts/example }
   - { name: SOT-Claud, config_dir: ~/.cw-accounts/sot-claud }
-  # - name: website          # build: npm ci && npm run build ; verify: npm run lint && npm test ; web: https://myotgo.com
+  # - name: website          # build: npm ci && npm run build ; verify: npm run lint && npm test ; web: https://example.com
   #   url: https://github.com/keyhan-azarjoo/NextJs-Myotgo-Website.git
   #   dev_branch: development
   #   plugin: generic
 
 jira:
-  base_url: https://myotgo.atlassian.net       # CONFIRM
+  base_url: https://example.atlassian.net       # CONFIRM
   project_key: SCRUM
   work_jql: 'project = SCRUM AND status = "To Do" AND labels = ready ORDER BY priority DESC'
   auth:
-    user_secret: myotgo-jira-email             # secret NAME → resolves to the Atlassian account email
-    token_secret: myotgo-jira-token            # secret NAME → resolves to the Atlassian API token
+    user_secret: example-jira-email             # secret NAME → resolves to the Atlassian account email
+    token_secret: example-jira-token            # secret NAME → resolves to the Atlassian API token
 
 usage_guard: { pause_pct: 95, resume_pct: 80, fail_open: false }   # migrated from V1 (98/95 → tuned)
 
 dashboard:
-  token: myotgo-controlplane-token             # secret NAME → Control Plane bearer token
+  token: example-controlplane-token             # secret NAME → Control Plane bearer token
 
 # ── Per-repo build / verification commands are passed to `serve` as flags (see live-acceptance.sh):
-#   backend  (.NET):   --build-cmd "dotnet build" --api-url https://api.myotgo.com/health
+#   backend  (.NET):   --build-cmd "dotnet build" --api-url https://api.example.com/health
 #   mobile   (Flutter):--build-cmd "flutter build apk --debug"
-#   website  (NextJs): --build-cmd "npm run build"   --web-url https://myotgo.com
+#   website  (NextJs): --build-cmd "npm run build"   --web-url https://example.com

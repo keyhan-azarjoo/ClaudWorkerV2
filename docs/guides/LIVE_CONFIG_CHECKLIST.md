@@ -1,18 +1,18 @@
 # Live Configuration Checklist
 
 Exactly what must be provided to go live. Items marked **MISSING** are the only remaining blockers;
-everything else is prepared (`deploy/myotgo/cwv2.yaml`). No manual searching required — this is the
+everything else is prepared (`deploy/example/cwv2.yaml`). No manual searching required — this is the
 complete list.
 
 ## Credentials (secret NAMES already referenced in config; provide VALUES in Keychain/Azure KV/env)
 
 | Secret name | What | Status |
 |---|---|---|
-| `myotgo-jira-email` | Atlassian account email | **MISSING** — provide value |
-| `myotgo-jira-token` | Atlassian API token | **MISSING** — provide value |
-| `myotgo-controlplane-token` | Control Plane bearer token | **MISSING** — generate + provide |
+| `example-jira-email` | Atlassian account email | **MISSING** — provide value |
+| `example-jira-token` | Atlassian API token | **MISSING** — provide value |
+| `example-controlplane-token` | Control Plane bearer token | **MISSING** — generate + provide |
 
-Verify with `cwv2 doctor --config deploy/myotgo/cwv2.yaml` (checks secret resolution without printing).
+Verify with `cwv2 doctor --config deploy/example/cwv2.yaml` (checks secret resolution without printing).
 
 ## GitHub / Git
 
@@ -26,7 +26,7 @@ Verify with `cwv2 doctor --config deploy/myotgo/cwv2.yaml` (checks secret resolu
 | Item | Status |
 |---|---|
 | At least one logged-in account `config_dir` (`~/.cw-accounts/*` or `~/.claude`) | **MISSING** — log in ≥1 account |
-| Account → config-dir mapping | ✅ prepared (`deploy/myotgo/resources.yaml`) |
+| Account → config-dir mapping | ✅ prepared (`deploy/example/resources.yaml`) |
 
 ## SSH keys
 
@@ -38,9 +38,9 @@ Verify with `cwv2 doctor --config deploy/myotgo/cwv2.yaml` (checks secret resolu
 
 | Repo | Build cmd | Verify | Status |
 |---|---|---|---|
-| backend (.NET) | `dotnet build` | API `https://api.myotgo.com/health` | **CONFIRM** command + URL |
+| backend (.NET) | `dotnet build` | API `https://api.example.com/health` | **CONFIRM** command + URL |
 | mobile (Flutter) | `flutter build apk --debug` | — | **CONFIRM** if piloted |
-| website (NextJs) | `npm run build` | web `https://myotgo.com` | **CONFIRM** if piloted |
+| website (NextJs) | `npm run build` | web `https://example.com` | **CONFIRM** if piloted |
 
 Passed to `cwv2 serve` via `--build-cmd`, `--api-url`, `--web-url` (see `deploy/live-acceptance.sh`).
 

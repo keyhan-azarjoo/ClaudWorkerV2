@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
-	"github.com/myotgo/ClaudWorkerV2/internal/jira"
-	"github.com/myotgo/ClaudWorkerV2/internal/logging"
-	"github.com/myotgo/ClaudWorkerV2/internal/secrets"
+	"claudworker/internal/config"
+	"claudworker/internal/jira"
+	"claudworker/internal/logging"
+	"claudworker/internal/secrets"
 )
 
 func jiraUsage() {

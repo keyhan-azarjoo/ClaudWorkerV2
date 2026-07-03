@@ -1,19 +1,19 @@
 // git.js — the Git page. Manages the project's REPOSITORIES (add/remove, activate/deactivate, and add
-// from the myotgo GitHub account) and shows live Git state (worktrees). Deactivating every repo turns
+// from the project's GitHub account) and shows live Git state (worktrees). Deactivating every repo turns
 // the project OFF — agents then refuse to work on it.
 import { api } from "api";
 import { el, card, sectionHead, badge, table, button, emptyState } from "ui";
 
 // Discover repos from the GitHub account and let the user add the ones they want.
 function discover(existingNames, onAdd) {
-  const listEl = el("div", { class: "fp-list" }, el("div", { class: "sub", style: { padding: "10px 12px" } }, "Loading myotgo repos…"));
-  const owner = el("input", { class: "login-input", value: "myotgo", style: { maxWidth: "200px" } });
+  const listEl = el("div", { class: "fp-list" }, el("div", { class: "sub", style: { padding: "10px 12px" } }, "Loading repos…"));
+  const owner = el("input", { class: "login-input", placeholder: "org / user (blank = project default)", style: { maxWidth: "260px" } });
   const reload = button("Reload", {});
   const closeBtn = button("Close", {});
   async function go() {
     listEl.replaceChildren(el("div", { class: "sub", style: { padding: "10px 12px" } }, "Loading…"));
     try {
-      const repos = (await api.query("github.repos", { owner: owner.value.trim() || "myotgo" })) || [];
+      const repos = (await api.query("github.repos", owner.value.trim() ? { owner: owner.value.trim() } : undefined)) || [];
       listEl.replaceChildren(
         ...repos.map((r) => {
           const added = existingNames.has(String(r.name).toLowerCase());

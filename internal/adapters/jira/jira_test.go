@@ -8,16 +8,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/adapters/sim"
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
-	"github.com/myotgo/ClaudWorkerV2/internal/controlplane"
-	jira "github.com/myotgo/ClaudWorkerV2/internal/jira"
-	"github.com/myotgo/ClaudWorkerV2/internal/knowledge"
-	"github.com/myotgo/ClaudWorkerV2/internal/lease"
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
-	"github.com/myotgo/ClaudWorkerV2/internal/policy"
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	"claudworker/internal/adapters/sim"
+	"claudworker/internal/assignment"
+	"claudworker/internal/controlplane"
+	jira "claudworker/internal/jira"
+	"claudworker/internal/knowledge"
+	"claudworker/internal/lease"
+	"claudworker/internal/orchestrator"
+	"claudworker/internal/policy"
+	"claudworker/internal/resource"
+	"claudworker/internal/verify"
 )
 
 // mockJira is a real HTTP server shaped like the Jira REST API — it exercises the adapter's actual

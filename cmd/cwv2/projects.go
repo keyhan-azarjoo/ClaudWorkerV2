@@ -149,6 +149,8 @@ type createProjectInput struct {
 	JiraToken  string `json:"jira_token"`
 	GithubTok  string `json:"github_token"`
 	AccountDir string `json:"account_dir"` // CLAUDE_CONFIG_DIR for this project's account (optional)
+	CommitName string `json:"commit_name"` // git author (defaults to the parent project's commit identity)
+	CommitMail string `json:"commit_email"`
 }
 
 // createProject scaffolds a NEW fully-isolated project: its own dir, config, secrets, engine home and
@@ -201,10 +203,18 @@ func createProject(registryPath string, in createProjectInput) (map[string]any, 
 	// Own web console (self-contained).
 	_ = exec.Command("cp", "-R", filepath.Join(home, ".cw-live", "web", "ops-console"), filepath.Join(dir, "web")).Run()
 
+	commitName := strings.TrimSpace(in.CommitName)
+	if commitName == "" {
+		commitName = "ClaudWorker"
+	}
+	commitMail := strings.TrimSpace(in.CommitMail)
+	if commitMail == "" {
+		commitMail = "claudworker@localhost"
+	}
 	cfg := fmt.Sprintf(`project: %s
 engine_home: %s/home
 github:
-  commit_identity: { name: keyhanazarjoo, email: keyhanazarjoo@gmail.com }
+  commit_identity: { name: %q, email: %q }
 repos:
   - name: repo
     dev_branch: %s
@@ -217,7 +227,7 @@ jira:
   work_jql: 'project = %s AND status = "To Do" AND labels = ready ORDER BY priority DESC'
 usage_guard: { pause_pct: 95, resume_pct: 80, fail_open: false }
 dashboard:
-`, slug, dir, in.DevBranch, in.Repo, name, accountDir, in.JiraURL, proj)
+`, slug, dir, commitName, commitMail, in.DevBranch, in.Repo, name, accountDir, in.JiraURL, proj)
 	if err := os.WriteFile(filepath.Join(dir, "cwv2.yaml"), []byte(cfg), 0o644); err != nil {
 		return nil, err
 	}
@@ -242,7 +252,7 @@ exec "$HOME/bin/cwv2" serve --config %q --mode live --bind 127.0.0.1:%d --web %q
 		return nil, err
 	}
 
-	label := "com.myotgo.cwv2-" + slug
+	label := "com.claudworker." + slug
 	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>

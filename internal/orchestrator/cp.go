@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
+	"claudworker/internal/assignment"
+	"claudworker/internal/resource"
 )
 
 // setAccountPaused pauses/resumes one account resource by id (body: {"id":"..."}).
@@ -197,7 +197,7 @@ func (o *Orchestrator) RegisterControlPlane() {
 		}()
 		return map[string]any{"issue": req.Issue, "continued": true}, nil
 	})
-	// accounts.pause / accounts.resume {"id":"acct-myotgo"} — per-account operator control (V1 parity).
+	// accounts.pause / accounts.resume {"id":"acct-main"} — per-account operator control (V1 parity).
 	o.CP.Command("accounts.pause", func(_ context.Context, body []byte) (any, error) {
 		return o.setAccountPaused(body, true)
 	})

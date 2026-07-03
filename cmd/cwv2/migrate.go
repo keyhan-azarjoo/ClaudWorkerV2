@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/migration"
+	"claudworker/internal/migration"
 )
 
 func migrateUsage() {

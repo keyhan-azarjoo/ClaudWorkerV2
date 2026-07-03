@@ -20,7 +20,7 @@ external SSD (P1, C-6). No VPS is required, ever (NFR-1).
     engine.db
     engine.yaml
     projects/
-      myotgo/
+      example/
         cwv2.yaml
         knowledge.db              # Knowledge Brain (persistent; backed up)
         knowledge/                # architecture.md, conventions.md, rules.md, glossary.md, decisions/
@@ -43,10 +43,10 @@ cd "/Volumes/Extreme SSD/ClaudWorkerV2"
 go build -o cwv2 ./cmd/cwv2
 
 # 3. one-time project init: create engine home + project config + brain
-./cwv2 init --project myotgo --config "/Volumes/Extreme SSD/cwv2-home/projects/myotgo/cwv2.yaml"
+./cwv2 init --project example --config "/Volumes/Extreme SSD/cwv2-home/projects/example/cwv2.yaml"
 
 # 4. verify config + secrets + repos + plugins
-./cwv2 doctor --project myotgo
+./cwv2 doctor --project example
 ```
 
 `doctor` checks: secrets resolve (keychain/Azure KV), repos reachable, `development` exists per repo,
@@ -57,7 +57,7 @@ failure with a precise message (no silent wrong defaults).
 
 ```bash
 # foreground (dev): scheduler + orchestrator + dashboard
-./cwv2 serve --project myotgo
+./cwv2 serve --project example
 # → dashboard at http://127.0.0.1:8790  (token printed)
 ```
 
@@ -75,7 +75,7 @@ Controls (also on the dashboard): `./cwv2 pause`, `./cwv2 resume`, `./cwv2 statu
 ## Usage guard & cost posture (NFR-2/3)
 
 - The guard reads the Claude plan usage (keychain credential → usage endpoint) and pauses spawning
-  at `pause_pct`, resumes at `resume_pct`, with a per-account policy (owner: admin@myotgo.com → 99%,
+  at `pause_pct`, resumes at `resume_pct`, with a per-account policy (owner: admin@example.com → 99%,
   others → ~80%). Fails **open** on read error (never blocks forever) but **never** forces
   pay-as-you-go/override.
 - Because deterministic work is free, throughput while paused is only limited on the *reasoning*
@@ -120,11 +120,11 @@ before the next:
 6. **Plugins**: flutter, dotnet, web — then hardware (esp32/pcb/cad) with deferral.
 7. **Usage guard, launchd, notifications, Mac-Mini dispatch.**
 
-No subsystem ships until it works on a real MyOTGO issue. Nothing is built simultaneously.
+No subsystem ships until it works on a real Example issue. Nothing is built simultaneously.
 
 ## Definition of operational done
 
-The Engine can be started with `cwv2 serve`, pick a real `Ready` MyOTGO issue, drive it to a
+The Engine can be started with `cwv2 serve`, pick a real `Ready` Example issue, drive it to a
 `--no-ff` merge on `development` with evidence, close it in Jira, delete the branch, and record the
 run — using zero tokens for deterministic steps and a small prompt for each reasoning step, with the
 usage guard and locks honored, and any impossible checks deferred with follow-ups. When that holds

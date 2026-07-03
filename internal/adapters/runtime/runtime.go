@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
-	"github.com/myotgo/ClaudWorkerV2/internal/runtime"
+	"claudworker/internal/assignment"
+	"claudworker/internal/orchestrator"
+	"claudworker/internal/runtime"
 )
 
 // Account is how one Claude account is executed. Selected by the Resource Manager; used, never chosen,

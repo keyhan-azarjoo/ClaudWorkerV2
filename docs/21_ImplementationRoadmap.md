@@ -87,7 +87,7 @@ For each subsystem: **build** (what), **validation** (deterministic checks it mu
 - **Build:** Go module skeleton, config loader ([13_Config](13_Config.md)), `cwv2 doctor`, engine-home
   layout on the SSD, structured logging.
 - **Validation:** `doctor` validates a config, resolves secrets by name, reports missing toolchains.
-- **Acceptance:** `cwv2 doctor --project myotgo` runs green against a real config; **zero tokens**.
+- **Acceptance:** `cwv2 doctor --project example` runs green against a real config; **zero tokens**.
 
 ### S1 — Toolbelt core (git + jira read)
 - **Build:** `git.*` (fetch/branch/worktree/commit/merge/push) and `jira.*` read (query/get/transitions)
@@ -117,7 +117,7 @@ reasoning inside it** (Law 18); it coordinates the toolbelt and spawns disposabl
 - **Validation:** unit + integration tests (with fakes) for every transition, retry, and
   resume-after-restart path; race detector; a crash/restart test proving unfinished work resumes and
   completed work is never redone (Law 19).
-- **Acceptance (Milestone M1 — "first light"):** one real MyOTGO issue is driven Ready → (skeleton
+- **Acceptance (Milestone M1 — "first light"):** one real Example issue is driven Ready → (skeleton
   lifecycle) → hand-off, resumable across a restart, with only the `Workers` port spending tokens
   (fakes in tests → zero tokens in CI).
 
@@ -180,7 +180,7 @@ reasoning inside it** (Law 18); it coordinates the toolbelt and spawns disposabl
 - **Build:** the migration pipeline ([22_Migration](22_Migration.md)): repo analysis, Jira analysis,
   eligibility recommendations, task-normalization proposals, deferred-work classification, Knowledge
   Brain initialization, build validation, dashboard init, human-review report.
-- **Validation:** run against MyOTGO read-only; report is accurate; **no issue auto-deleted**; nothing
+- **Validation:** run against Example read-only; report is accurate; **no issue auto-deleted**; nothing
   applied without approval.
 - **Acceptance (M3):** migrating a fresh project produces an approved profile + initialized Knowledge
   Brain before any Assignment starts.
@@ -207,7 +207,7 @@ reasoning inside it** (Law 18); it coordinates the toolbelt and spawns disposabl
   honestly deferred.
 
 ### S13 — Portability + Future
-- **Build:** onboard a **second, non-MyOTGO** project by config + plugins only; evaluate whether Future
+- **Build:** onboard a **second, non-Example** project by config + plugins only; evaluate whether Future
   advisory locks are warranted by measured conflict rate ([15_LockManager](15_LockManager.md)).
 - **Validation:** no engine-core change needed for the new project (Law 16).
 - **Acceptance (M4 — "portable"):** project #2 runs the full loop from its own `cwv2.yaml`; advisory

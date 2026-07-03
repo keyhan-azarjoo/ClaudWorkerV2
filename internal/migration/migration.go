@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
+	"claudworker/internal/resource"
 )
 
 // --- V1 source shapes (subset we read; read-only) ---

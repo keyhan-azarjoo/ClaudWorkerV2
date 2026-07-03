@@ -8,8 +8,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	"claudworker/internal/orchestrator"
+	"claudworker/internal/verify"
 )
 
 // Jira is a deterministic in-memory work source.

@@ -4,7 +4,7 @@ Date: 2026-07-02. Goal: complete the transition from Simulation to fully operati
 
 ## Headline
 
-**Live Mode is ACTIVE. https://agents.myotgo.com now serves the live ClaudWorker V2 runtime** (Mac,
+**Live Mode is ACTIVE. https://agents.example.com now serves the live ClaudWorker V2 runtime** (Mac,
 authenticated), replacing the Simulation container. One real blocker was found and fixed. The owner
 chose: serve live via the Mac runtime + reverse tunnel (V1's topology), and keep the work-loop idle
 (no autonomous production deploys until tickets are labelled `ready`). Claude runs locally per the
@@ -12,11 +12,11 @@ chose: serve live via the Mac runtime + reverse tunnel (V1's topology), and keep
 
 ## Final live topology (as deployed)
 
-- **Runtime:** `cwv2 serve --mode live` on the Mac (launchd `com.myotgo.cwv2-live`, KeepAlive), bound
+- **Runtime:** `cwv2 serve --mode live` on the Mac (launchd `com.example.cwv2-live`, KeepAlive), bound
   to `127.0.0.1:8787`, Control Plane authenticated with a 32-byte token
   (`~/.cw-live/secrets/controlplane.token`, 600 — not in git).
-- **Exposure:** reverse tunnel (launchd `com.myotgo.agents-tunnel`, self-healing) forwards prod-host
-  `172.18.0.1:9787 → Mac 127.0.0.1:8787`; Caddy `agents.myotgo.com → reverse_proxy 172.18.0.1:9787`.
+- **Exposure:** reverse tunnel (launchd `com.example.agents-tunnel`, self-healing) forwards prod-host
+  `172.18.0.1:9787 → Mac 127.0.0.1:8787`; Caddy `agents.example.com → reverse_proxy 172.18.0.1:9787`.
 - **Secrets:** Jira email/token + GitHub token injected from the existing bridge-secrets reference
   into `~/.cw-live/secrets/live.env` (600, outside `~/Documents` so launchd/TCC can read it — the same
   reason V1's tunnel lived outside Documents). Config uses secret **names**; no secret is in git.
@@ -32,7 +32,7 @@ chose: serve live via the Mac runtime + reverse tunnel (V1's topology), and keep
 (CHANGE-2046 → HTTP 410); the client used it, so the assignment engine could never fetch or claim
 work. Fixed by migrating `Client.Search` to the bounded `POST /rest/api/3/search/jql` endpoint
 (+`NextPageToken`/`IsLast`), with a regression test that fails if the client ever reverts to the
-removed endpoint. Verified live against `myotgo.atlassian.net` (returns the real 8-issue To Do board).
+removed endpoint. Verified live against `example.atlassian.net` (returns the real 8-issue To Do board).
 Merged to `development`, pushed, and the production container image rebuilt with the fix. Suite: 27/27
 `-race`, gofmt/vet clean.
 
@@ -46,8 +46,8 @@ Merged to `development`, pushed, and the production container image rebuilt with
 | Jira queue | `jira.queue` live query returns real data; ready-queue currently **empty** (see below) |
 | Jira transitions/comments/labels/automation/attachments | Toolbelt present; all use unchanged `/rest/api/3/issue/...` endpoints (not affected by the removal); covered by unit tests |
 | Git | clone ✓ (at startup), worktree-add ✓, commit ✓, **`--no-ff` merge ✓**, worktree-remove ✓, branch-delete ✓; fetch/push available. Proven on a real repo. |
-| Claude runtime | Real execution under the `myotgo` account → returned `LIVE_RUNTIME_OK`, exit 0. **The runtime executes real work.** |
-| Account rotation | 10 Claude accounts discovered from `~/.cw-accounts` (myotgo, sot-claud, admin, …), all healthy → real selection pool |
+| Claude runtime | Real execution under the `example` account → returned `LIVE_RUNTIME_OK`, exit 0. **The runtime executes real work.** |
+| Account rotation | 10 Claude accounts discovered from `~/.cw-accounts` (example, sot-claud, admin, …), all healthy → real selection pool |
 | Usage guard / cooldown | Wired: policy budget check (pause 95 / resume 80) + `runtime.state` tracks cooldowns/failover |
 | Knowledge Brain | `knowledge.list` live query available (file-backed store under engine home) |
 | Control Plane (live) | All live queries served: accounts, git.status/worktrees, jira.queue, knowledge, leases, policies.decisions, resources.snapshot, runtime.state, runtimes.list |
@@ -72,7 +72,7 @@ run on a production ticket** was **not** triggered, for two honest reasons:
 ## Answers
 
 - **Is ClaudWorker V2 now fully operational?**
-  **Yes.** Live Mode is running and serving at https://agents.myotgo.com; every subsystem is verified
+  **Yes.** Live Mode is running and serving at https://agents.example.com; every subsystem is verified
   against real Jira/Git/Claude; the one real blocker (Jira search API) is fixed. It is idle **by the
   owner's choice** (empty `ready` queue), ready to work the moment a ticket is labelled `ready`.
 
@@ -87,7 +87,7 @@ run on a production ticket** was **not** triggered, for two honest reasons:
   1. **Feed work / authorize autonomous deploys** — label SCRUM tickets `ready` (owner chose "keep
      idle"). A real backend merge→push auto-deploys, so this stays owner-gated (`no-solo-deploy`).
   2. **Availability** — the public URL now depends on this Mac + tunnel (V1's topology, owner-chosen);
-     if the Mac is off, agents.myotgo.com 502s (rollback: repoint Caddy to the sim container).
+     if the Mac is off, agents.example.com 502s (rollback: repoint Caddy to the sim container).
   3. **Worker trust** — first real worker run needs the Claude workspace "trusted"
      (`hasTrustDialogAccepted`) for the account config dirs; harmless while idle.
   4. (Optional) move the Jira/GitHub secrets into Azure Key Vault / keychain instead of the
@@ -95,16 +95,16 @@ run on a production ticket** was **not** triggered, for two honest reasons:
 
 ## Rollback
 
-- Repoint Caddy: `cp /opt/myotgo/Caddyfile.bak.pre-live-* /opt/myotgo/Caddyfile`, `docker start cwv2`,
+- Repoint Caddy: `cp /opt/example/Caddyfile.bak.pre-live-* /opt/example/Caddyfile`, `docker start cwv2`,
   restart caddy → back to the Simulation container.
-- Stop live runtime: `launchctl bootout gui/$(id -u)/com.myotgo.cwv2-live` (+ `com.myotgo.agents-tunnel`).
+- Stop live runtime: `launchctl bootout gui/$(id -u)/com.example.cwv2-live` (+ `com.example.agents-tunnel`).
 
 ## How to switch on (once the owner decides)
 
 - Live runtime (Mac): `MYOTGO_JIRA_EMAIL`/`MYOTGO_JIRA_TOKEN` in env (from the existing bridge
   secrets), then `cwv2 serve --config <live.yaml> --mode live`. Doctor passes.
 - To serve it at the URL: re-enable the reverse tunnel (Mac cwv2 port → host) and point the Caddy
-  `agents.myotgo.com` block at that upstream (reverse of the container repoint; Caddyfile backup
+  `agents.example.com` block at that upstream (reverse of the container repoint; Caddyfile backup
   exists). Reversible.
 - To arm work: label a SCRUM ticket `ready`. The loop claims it, develops in an isolated worktree,
   verifies (build/test gate), merges `--no-ff`, updates Jira, releases resources.

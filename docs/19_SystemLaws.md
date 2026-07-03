@@ -171,10 +171,10 @@ overwrites them.
 **(P10)** The engine core is project-agnostic; new projects/types are added by config + plugins only,
 never by editing core.
 
-- **Why:** one engine serves every current and future project (MyOTGO is "just a config").
-- **Prevents:** MyOTGO-specific logic leaking into core; a fork per project.
+- **Why:** one engine serves every current and future project (Example is "just a config").
+- **Prevents:** Example-specific logic leaking into core; a fork per project.
 - **Trade-offs:** capabilities must fit the plugin contract ([18_PluginContract](18_PluginContract.md)).
-- **Failure example:** an `if project == "myotgo"` branch in the Orchestrator makes project #2 require
+- **Failure example:** an `if project == "example"` branch in the Orchestrator makes project #2 require
   a code change — the portability promise is broken.
 
 ## Law 17 — The architecture remains simple

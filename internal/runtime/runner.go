@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
+	"claudworker/internal/assignment"
 )
 
 // Runner is the deterministic, provider-agnostic wrapper around a WorkerRuntime. It owns the

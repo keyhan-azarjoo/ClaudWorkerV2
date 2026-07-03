@@ -84,7 +84,7 @@ the last stable stage.
 ## Identity & hooks (owner rules)
 
 - **Author/committer:** always `keyhanazarjoo <keyhanazarjoo@gmail.com>` (C-2). Configured per
-  worktree by the git tool; never the `myotgo` author, never `Co-Authored-By: Claude`.
+  worktree by the git tool; never the `example` author, never `Co-Authored-By: Claude`.
 - **Remote/`gh`:** operations run as GitHub user `keyhan-azarjoo`.
 - **Secret-scanning pre-commit** (gitleaks-style) runs in every repo. A *real* secret block → fix it
   (env/secret store), never bypass. `--no-verify` only for a genuinely broken hook.

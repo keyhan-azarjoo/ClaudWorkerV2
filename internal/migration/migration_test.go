@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
+	"claudworker/internal/resource"
 )
 
 const fixture = "testdata/v1"

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
+	"claudworker/internal/config"
 )
 
 // usageMonitor reports each account's real subscription usage (5-hour session + 7-day week %, with

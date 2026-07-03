@@ -22,7 +22,7 @@ Wrapping the owner's established, installed sim/verification stack:
   runs (`wokwi-cli`, `--expect-text`/`--fail-text`, exit 0 = PASS), multi-node **Renode**
   simulation. Tools: `fw.build`, `fw.wokwi`, `fw.renode`, `fw.flash` (only if `device.connected?`).
 - **PCB:** `kicad-cli` DRC/ERC, netlist extraction, board render, **ngspice** SPICE sims, the
-  `myotgo-pcb` MCP checks (DRC, creepage, SPICE, verify). Tools: `pcb.drc`, `pcb.erc`,
+  `example-pcb` MCP checks (DRC, creepage, SPICE, verify). Tools: `pcb.drc`, `pcb.erc`,
   `pcb.netlist`, `pcb.render`, `pcb.spice`, `pcb.verify`.
 - **3D / CAD:** `python-fcl` + `trimesh` **puzzle-fit** test (interference/clearance) and
   `mesh.contains()` occupancy/alignment probes, FreeCAD `freecadcmd` cross-check, STL export, float

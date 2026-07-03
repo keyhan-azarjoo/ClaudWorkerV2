@@ -4,14 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
-	"github.com/myotgo/ClaudWorkerV2/internal/controlplane"
-	"github.com/myotgo/ClaudWorkerV2/internal/knowledge"
-	"github.com/myotgo/ClaudWorkerV2/internal/lease"
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
-	"github.com/myotgo/ClaudWorkerV2/internal/policy"
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	"claudworker/internal/assignment"
+	"claudworker/internal/controlplane"
+	"claudworker/internal/knowledge"
+	"claudworker/internal/lease"
+	"claudworker/internal/orchestrator"
+	"claudworker/internal/policy"
+	"claudworker/internal/resource"
+	"claudworker/internal/verify"
 )
 
 // TestSimulationModeCompletesAllWork proves Simulation Mode runs the FULL loop with no external

@@ -27,14 +27,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
-	"github.com/myotgo/ClaudWorkerV2/internal/controlplane"
-	"github.com/myotgo/ClaudWorkerV2/internal/devicemon"
-	"github.com/myotgo/ClaudWorkerV2/internal/jira"
-	"github.com/myotgo/ClaudWorkerV2/internal/secrets"
+	"claudworker/internal/config"
+	"claudworker/internal/controlplane"
+	"claudworker/internal/devicemon"
+	"claudworker/internal/jira"
+	"claudworker/internal/secrets"
 )
 
-// knownBoards are the MyOTGO C6 test boards (stable WCH-bridge port paths). Any other
+// knownBoards are the C6 test boards (stable WCH-bridge port paths). Any other
 // ESP bridge/serial port found on disk is added automatically (the analyzer ignores
 // non-ESP ports gracefully — booted=false, no ticket).
 var knownBoards = []devicemon.Device{

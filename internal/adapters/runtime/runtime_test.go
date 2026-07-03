@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
-	"github.com/myotgo/ClaudWorkerV2/internal/runtime"
+	"claudworker/internal/assignment"
+	"claudworker/internal/orchestrator"
+	"claudworker/internal/runtime"
 )
 
 func assignmentOK() assignment.WorkerResult { return assignment.WorkerResult{OK: true} }

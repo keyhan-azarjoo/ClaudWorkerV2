@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/backup"
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
-	"github.com/myotgo/ClaudWorkerV2/internal/doctor"
-	"github.com/myotgo/ClaudWorkerV2/internal/enginehome"
-	"github.com/myotgo/ClaudWorkerV2/internal/logging"
+	"claudworker/internal/backup"
+	"claudworker/internal/config"
+	"claudworker/internal/doctor"
+	"claudworker/internal/enginehome"
+	"claudworker/internal/logging"
 )
 
 // cmdValidate is the startup/config validator (production gate). It loads the config and runs the full

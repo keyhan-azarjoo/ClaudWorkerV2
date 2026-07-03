@@ -88,7 +88,7 @@ When two designs both satisfy the principles, prefer, in order:
   with**, and never overwrites, human work.
 - Not a maximizer of agent activity. Idle is fine; an idle engine that has completed the backlog is
   a *success*, not a waste.
-- Not MyOTGO-specific. MyOTGO is simply the first project configuration.
+- Not Example-specific. Example is simply the first project configuration.
 
 ## The bet
 
@@ -100,6 +100,6 @@ finish more issues, more reliably, for far less money, and be dramatically easie
 ## What "done" means for V2 itself
 
 V2 is finished when: (a) all 15 architecture docs are frozen and consistent; (b) the engine can
-take a real Jira issue from *ready* to *closed/merged* on the MyOTGO project without human help for
+take a real Jira issue from *ready* to *closed/merged* on the Example project without human help for
 the common case; (c) it demonstrably spends fewer tokens per completed issue than V1; and (d) a
-second, non-MyOTGO project can be onboarded by writing only a config + (if needed) a plugin.
+second, non-Example project can be onboarded by writing only a config + (if needed) a plugin.

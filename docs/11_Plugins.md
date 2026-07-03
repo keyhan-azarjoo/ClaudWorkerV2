@@ -95,6 +95,6 @@ of mind (P6).
 
 ## Portability guarantee
 
-The engine core has **no** `if project == "myotgo"` logic. MyOTGO is expressed entirely as: a
-project config + a selection of these plugins + the MyOTGO Brain. Any future project is onboarded
+The engine core has **no** `if project == "example"` logic. Example is expressed entirely as: a
+project config + a selection of these plugins + the Example Brain. Any future project is onboarded
 the same way (P10, FR-26/27).

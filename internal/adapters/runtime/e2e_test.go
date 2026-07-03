@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	gitadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/git"
-	"github.com/myotgo/ClaudWorkerV2/internal/adapters/sim"
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
-	"github.com/myotgo/ClaudWorkerV2/internal/controlplane"
-	git "github.com/myotgo/ClaudWorkerV2/internal/git"
-	"github.com/myotgo/ClaudWorkerV2/internal/knowledge"
-	"github.com/myotgo/ClaudWorkerV2/internal/lease"
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
-	"github.com/myotgo/ClaudWorkerV2/internal/policy"
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	gitadapter "claudworker/internal/adapters/git"
+	"claudworker/internal/adapters/sim"
+	"claudworker/internal/assignment"
+	"claudworker/internal/controlplane"
+	git "claudworker/internal/git"
+	"claudworker/internal/knowledge"
+	"claudworker/internal/lease"
+	"claudworker/internal/orchestrator"
+	"claudworker/internal/policy"
+	"claudworker/internal/resource"
+	"claudworker/internal/verify"
 )
 
 // TestFailoverThroughResourceManager: a rate-limit cools the account VIA the Resource Manager; the
