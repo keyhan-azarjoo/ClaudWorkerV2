@@ -52,6 +52,8 @@ type Response struct {
 	Result          assignment.WorkerResult
 	PromptBytes     int // bytes delivered to the provider
 	CompletionBytes int // bytes of the provider's completion (its result text)
+	InputTokens     int // ACCURATE tokens sent (from the provider's usage; 0 if unknown)
+	OutputTokens    int // ACCURATE tokens received (from the provider's usage; 0 if unknown)
 }
 
 // Metrics is the deterministic measurement of one Runner.Run (owner-mandated set). No tokens are
@@ -124,6 +126,17 @@ func BuildPrompt(in assignment.WorkerInput) string {
 	b.WriteString("\n# Working style\n")
 	b.WriteString("You are working INSIDE this task's git worktree (your current directory). Make the real code changes directly here.\n")
 	b.WriteString("GO MAXIMALLY WIDE — the goal is to finish this task in 3–5 minutes. Immediately decompose it and spawn AS MANY PARALLEL SUBAGENTS (the Task tool) as it usefully splits into — up to 20 — to work together on this ONE task on the SAME branch, all at once. Give each subagent a DIFFERENT part / different files so they never edit the same file at the same time; launch them CONCURRENTLY (in a single batch), never one-by-one. Add more agents rather than doing work serially. Only use a single agent for a genuinely tiny change. After the subagents finish, quickly integrate + double-check the combined result is coherent, complete and correct, then finish.\n")
+
+	// Real hardware / device testing: the worker has a full shell, so when the task touches an app,
+	// device, board or hardware behaviour it should VERIFY on whatever real devices are connected —
+	// acting like a human tester (drive the UI, take screenshots, read back state, actuate the device),
+	// not just building. This is a capability instruction; the agent discovers what is connected itself.
+	b.WriteString("\n# Test on real devices & hardware (act like a human tester)\n")
+	b.WriteString("You have a real shell and may use ANY connected device to verify your work — do so whenever the task touches an app, UI, device, board, sensor or hardware behaviour. First DISCOVER what's connected, then EXERCISE it and CONFIRM the result with evidence (screenshots / serial output / read-back state), the way a person would:\n")
+	b.WriteString("- Android phones/tablets: `adb devices`; drive the app and capture screenshots (`adb exec-out screencap -p > shot.png`), tap/type via `adb shell input`, read logs via `adb logcat`.\n")
+	b.WriteString("- iOS simulators/devices: `xcrun simctl list`; boot, launch the app, `xcrun simctl io booted screenshot shot.png`; use the device-control tooling if present.\n")
+	b.WriteString("- ESP32 / microcontrollers & sensors: find boards under `/dev/cu.*` or `/dev/ttyUSB*`; flash/monitor over serial, send commands and read back the response to confirm the device actually reacts.\n")
+	b.WriteString("- Take BEFORE/AFTER screenshots or captures so the behaviour change is proven, and describe what you observed in your summary. If NO relevant device is connected, say so and fall back to the normal build/verify — never fake a device result.\n")
 
 	// Output contract: reply with ONE JSON object matching WorkerResult so response collection is
 	// deterministic. Edits are made directly in the worktree, so "files" may be empty even on success

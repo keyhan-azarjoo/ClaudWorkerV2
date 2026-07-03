@@ -98,7 +98,7 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 func (o *Orchestrator) mergeAndClose(ctx context.Context, a *assignment.Assignment, iss Issue) error {
 	a.State = assignment.StateMerging
 	_ = o.Store.Save(a)
-	o.recordAction(iss.Key, "merge", "running", "")
+	o.recordAction(iss.Key, "merge", "running", "→ "+o.Cfg.DevBranch)
 
 	l, granted, _ := o.Leases.Acquire(lease.Request{Kind: lease.KindMerge, Resource: o.Cfg.DevBranch, Owner: iss.Key, Reason: "merge", Renewable: false})
 	if !granted {
@@ -112,11 +112,18 @@ func (o *Orchestrator) mergeAndClose(ctx context.Context, a *assignment.Assignme
 	}()
 
 	merged, err := o.Merger.Merge(ctx, iss.Key)
-	if err != nil || !merged {
-		return o.fail(ctx, a, iss, "merge failed")
+	if err != nil {
+		reason := "merge failed: " + firstLine(err.Error())
+		o.recordAction(iss.Key, "merge", "failed", reason)
+		return o.fail(ctx, a, iss, reason)
+	}
+	if !merged {
+		reason := "merge conflict — the branch overlaps changes another agent pushed; open the task and Continue with guidance to rebase/resolve"
+		o.recordAction(iss.Key, "merge", "failed", reason)
+		return o.fail(ctx, a, iss, reason)
 	}
 	o.emit("MergeCompleted", "git", map[string]any{"issue": iss.Key, "branch": o.Cfg.DevBranch})
-	o.recordAction(iss.Key, "merge", "done", o.Cfg.DevBranch)
+	o.recordAction(iss.Key, "merge", "done", "merged into "+o.Cfg.DevBranch)
 
 	if o.Cfg.DoneStatus != "" {
 		_ = o.Jira.Transition(ctx, iss.Key, o.Cfg.DoneStatus)
@@ -249,4 +256,14 @@ func (im *impImprover) Improve(ctx context.Context, in improvement.ImprovementIn
 		return improvement.Change{}, err
 	}
 	return improvement.Change{Category: improvement.CatDefect, Reason: dev.Summary, ChangedFiles: dev.ChangedFiles}, nil
+}
+
+// firstLine returns the first non-empty, trimmed line of s (for compact error reasons in the timeline).
+func firstLine(s string) string {
+	for _, l := range strings.Split(s, "\n") {
+		if t := strings.TrimSpace(l); t != "" {
+			return t
+		}
+	}
+	return strings.TrimSpace(s)
 }

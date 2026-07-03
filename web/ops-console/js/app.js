@@ -30,6 +30,7 @@ const NAV = [
     group: "Infrastructure",
     items: [
       { path: "/resources", label: "Resources", ico: "resources" },
+      { path: "/devicelogs", label: "Device Logs", ico: "logs", countType: "DeviceFaultDetected" },
       { path: "/leases", label: "Leases", ico: "leases", countType: "LeaseGranted" },
       { path: "/git", label: "Git", ico: "projects", countType: "MergeCompleted" },
       { path: "/runtimes", label: "AI Runtimes", ico: "runtimes" },
@@ -58,6 +59,7 @@ const MODULES = {
   "/improvement": () => import("./modules/improvement.js"),
   "/policies": () => import("./modules/policies.js"),
   "/resources": () => import("./modules/resources.js"),
+  "/devicelogs": () => import("./modules/devicelog.js"),
   "/leases": () => import("./modules/leases.js"),
   "/git": () => import("./modules/git.js"),
   "/runtimes": () => import("./modules/runtimes.js"),
@@ -123,6 +125,34 @@ async function ensureAuth() {
   });
 }
 
+// --- Multi-project switcher ---------------------------------------------------------------------
+// Each project is its OWN isolated cwv2 instance, served under the SAME url at /p/<slug>/ (the root is
+// the default project). Switching simply NAVIGATES to that project's path — its console then talks to
+// its own backend and keeps its own token. Sub-projects are added with scripts/cwv2-new-project.sh.
+function projectSwitcher() {
+  const sel = el("select", { class: "project-select", title: "Switch project (each is a separate, isolated backend)" });
+  const curBase = config().base;
+  sel.append(el("option", { value: curBase }, "Loading…"));
+  sel.onchange = () => {
+    const base = sel.value;
+    if (base !== curBase) location.href = (base || "") + "/";
+  };
+  api
+    .query("projects.list")
+    .then((list) => {
+      const projects = Array.isArray(list) && list.length ? list : [{ name: "This project", base: curBase }];
+      sel.replaceChildren();
+      projects.forEach((p) => sel.append(el("option", { value: p.base || "" }, p.name)));
+      if (!projects.some((p) => (p.base || "") === curBase)) sel.append(el("option", { value: curBase }, "Current"));
+      sel.value = curBase;
+    })
+    .catch(() => {
+      sel.replaceChildren(el("option", { value: curBase }, "This project"));
+      sel.value = curBase;
+    });
+  return sel;
+}
+
 async function build() {
   // Apply the persisted theme (dark-first default set in index.html).
   const savedTheme = localStorage.getItem("oc.theme");
@@ -160,7 +190,7 @@ async function build() {
       "div",
       { class: "brand" },
       el("div", { class: "logo" }, "CW"),
-      el("div", {}, el("div", { class: "name" }, "ClaudWorker"), el("div", { class: "sub" }, "Operations Console"))
+      el("div", { style: { minWidth: 0, flex: 1 } }, el("div", { class: "name" }, "ClaudWorker"), projectSwitcher())
     ),
     navEl,
     el("div", { class: "sidebar-foot" }, "Control Plane client · v0.1")

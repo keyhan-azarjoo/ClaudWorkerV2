@@ -56,6 +56,8 @@ type Metrics struct {
 	PromptBytes     int    `json:"prompt_bytes"`
 	CompletionBytes int    `json:"completion_bytes"`
 	TokenEstimate   int    `json:"token_estimate"`
+	InputTokens     int    `json:"input_tokens"`  // ACCURATE tokens sent (0 if provider didn't report)
+	OutputTokens    int    `json:"output_tokens"` // ACCURATE tokens received
 	Retries         int    `json:"retries"`
 	Class           Class  `json:"class"`
 }
@@ -70,6 +72,8 @@ type Worker struct {
 	Cooldown        func(account string, d time.Duration) // health signal → Resource Manager (optional)
 	OnMetrics       func(Metrics)                         // → Control Plane (optional)
 	OnLog           func(issue, line string)              // live agent activity → Control Plane (optional)
+	OnTokens        func(issue string, in, out int)       // live (rough) per-run token usage → Control Plane
+	OnTokensDone    func(issue string, in, out int)       // accurate per-run totals at run end → banked to the task total
 	now             func() time.Time
 
 	mu       sync.Mutex
@@ -102,10 +106,15 @@ func (w *Worker) clock() func() time.Time {
 func (w *Worker) Develop(ctx context.Context, worktree string, in orchestrator.DevInput) (orchestrator.DevResult, error) {
 	acct := w.Accounts[in.Account] // zero Account (default env) if unknown/empty
 
-	// Live activity → Control Plane (per task), so the console can show what the agent is doing.
+	// Live activity + accurate token usage → Control Plane (per task).
 	onLine := func(s string) {
 		if w.OnLog != nil {
 			w.OnLog(in.Issue, s)
+		}
+	}
+	onUsage := func(inTok, outTok int) {
+		if w.OnTokens != nil {
+			w.OnTokens(in.Issue, inTok, outTok)
 		}
 	}
 	// Engine routing: codex accounts run the Codex CLI; everything else runs Claude Code.
@@ -113,7 +122,7 @@ func (w *Worker) Develop(ctx context.Context, worktree string, in orchestrator.D
 	if acct.Engine == "codex" {
 		rt = runtime.CodexWorkerRuntime{Bin: "codex", Dir: worktree, Env: codexEnv(acct), OnLine: onLine}
 	} else {
-		crt := runtime.ClaudeWorkerRuntime{Bin: w.Bin, Dir: worktree, Env: accountEnv(acct), OnLine: onLine}
+		crt := runtime.ClaudeWorkerRuntime{Bin: w.Bin, Dir: worktree, Env: accountEnv(acct), OnLine: onLine, OnUsage: onUsage}
 		if acct.Model != "" {
 			// Mirror defaultClaudeArgs (stream-json for live output + acceptEdits for autonomous edits)
 			// and pin the account's model.
@@ -163,10 +172,18 @@ func (w *Worker) Develop(ctx context.Context, worktree string, in orchestrator.D
 		PromptBytes:     resp.PromptBytes,
 		CompletionBytes: resp.CompletionBytes,
 		TokenEstimate:   runtime.EstimateTokens(resp.PromptBytes + resp.CompletionBytes),
+		InputTokens:     resp.InputTokens,
+		OutputTokens:    resp.OutputTokens,
 		Retries:         retries,
 		Class:           class,
 	}
 	w.record(m)
+	// Bank this run's ACCURATE token totals (from the result event) into the task total. Each Develop
+	// call is one run boundary (initial develop, then each improvement iteration), so the task total is
+	// the sum of every run's accurate usage.
+	if w.OnTokensDone != nil {
+		w.OnTokensDone(in.Issue, resp.InputTokens, resp.OutputTokens)
+	}
 
 	switch class {
 	case ClassSuccess:

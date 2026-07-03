@@ -4,16 +4,29 @@
 const KEY_BASE = "oc.base";
 const KEY_TOKEN = "oc.token";
 
+// The console can be served under a per-project path prefix (/p/<slug>/) on the SAME url — each project
+// is its OWN isolated backend. Derive the API base from that path so every /v1 call hits THIS project,
+// and scope the access token per base so each project keeps its own credentials in the shared origin.
+function detectBase() {
+  const m = location.pathname.match(/^(\/p\/[^/]+)(?:\/|$)/);
+  return m ? m[1] : "";
+}
+function effectiveBase() {
+  const override = localStorage.getItem(KEY_BASE);
+  return override !== null && override !== "" ? override : detectBase();
+}
+function tokenKeyFor(base) {
+  return base ? KEY_TOKEN + ":" + base : KEY_TOKEN;
+}
+
 export function config() {
-  return {
-    base: localStorage.getItem(KEY_BASE) || "", // "" = same origin as the console
-    token: localStorage.getItem(KEY_TOKEN) || "",
-  };
+  const base = effectiveBase();
+  return { base, token: localStorage.getItem(tokenKeyFor(base)) || "" };
 }
 
 export function setConfig({ base, token }) {
   if (base !== undefined) localStorage.setItem(KEY_BASE, base);
-  if (token !== undefined) localStorage.setItem(KEY_TOKEN, token);
+  if (token !== undefined) localStorage.setItem(tokenKeyFor(effectiveBase()), token);
 }
 
 export function authHeaders() {

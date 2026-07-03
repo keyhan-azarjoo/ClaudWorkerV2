@@ -120,7 +120,27 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/status", s.withAuth(s.handleStatus))
 	mux.HandleFunc("GET /v1/metrics", s.withAuth(s.handleMetrics))
 	mux.HandleFunc("GET /v1/events", s.withAuth(s.handleEvents))
-	return mux
+	return withCORS(mux)
+}
+
+// withCORS reflects the request Origin so ONE Operations Console can talk to MULTIPLE project backends
+// (the project switcher points at different Control Planes). Every endpoint is Bearer-token gated, so
+// reflecting the origin exposes nothing that the token doesn't already gate. Handles preflight.
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if origin := r.Header.Get("Origin"); origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Last-Event-ID")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Max-Age", "600")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) withAuth(h http.HandlerFunc) http.HandlerFunc {

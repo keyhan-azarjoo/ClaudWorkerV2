@@ -9,8 +9,11 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -112,6 +115,13 @@ type TaskActivity struct {
 	Account   string       `json:"account,omitempty"`
 	StartedAt time.Time    `json:"started_at"`
 	Actions   []TaskAction `json:"actions"`
+	TokensIn  int          `json:"tokens_in"`  // ACCURATE tokens sent for this task (live, cumulative)
+	TokensOut int          `json:"tokens_out"` // ACCURATE tokens received for this task (live, cumulative)
+	Agents    int          `json:"agents"`     // how many agents worked on this task (main + sub-agents spawned)
+
+	// per-run token bookkeeping (unexported; not serialized). Each Develop run reports a cumulative
+	// count that starts near 0; when it drops we've begun a new run, so we bank the finished run.
+	curIn, curOut, bankIn, bankOut int
 }
 
 // Orchestrator wires the subsystems and runs the loop. It holds subsystem INSTANCES (deterministic,
@@ -133,13 +143,20 @@ type Orchestrator struct {
 	Cfg       Config
 	Log       *slog.Logger
 
+	// WorkAllowed optionally gates ALL work (auto-claim + manual run). It returns false + a reason when
+	// the project is deactivated (e.g. every repo turned off on the Git page), so agents do nothing.
+	// nil = always allowed.
+	WorkAllowed func() (bool, string)
+
 	now     func() time.Time
 	trigger chan struct{}
+
+	TaskLogDir string // if set, per-task agent transcripts are persisted here (survive restarts)
 
 	mu         sync.Mutex
 	counters   map[string]int
 	taskLog    map[string]*TaskActivity
-	taskStream map[string][]string // per-issue live agent activity lines (bounded)
+	taskStream map[string][]string // per-issue live agent activity lines (bounded; also persisted)
 	inflight   map[string]bool     // issues currently executing — guards against double-launch
 	decisions  []map[string]any    // policy-decision ring for the Policies page
 	lastIssue  string
@@ -165,26 +182,136 @@ func (o *Orchestrator) IsActive() bool {
 	return o.active
 }
 
-// AppendTaskLog records one live activity line for a task (what the agent is thinking/doing), bounded
-// to the most recent 800 lines per task so the console can show the full transcript.
+// AppendTaskLog records one live activity line for a task (what the agent is thinking/doing). It keeps
+// the recent lines in memory AND appends to a per-task file (TaskLogDir) so the full agent transcript
+// survives restarts and can be reviewed for DONE tasks.
 func (o *Orchestrator) AppendTaskLog(issue, line string) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	if o.taskStream == nil {
 		o.taskStream = map[string][]string{}
 	}
 	s := append(o.taskStream[issue], line)
-	if len(s) > 800 {
-		s = s[len(s)-800:]
+	if len(s) > 4000 {
+		s = s[len(s)-4000:]
 	}
 	o.taskStream[issue] = s
+	// Count how many agents worked on this task: the main agent (1) plus every sub-agent it spawned
+	// (each "🤖 sub-agent" line = one Task-tool fan-out). Persisted with the activity, so DONE tasks keep it.
+	t := o.ensureTask(issue)
+	if t.Agents == 0 {
+		t.Agents = 1 // the orchestrating agent
+	}
+	if strings.HasPrefix(line, "🤖 sub-agent") {
+		t.Agents++
+	}
+	dir := o.TaskLogDir
+	o.mu.Unlock()
+
+	if dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err == nil {
+			if f, err := os.OpenFile(filepath.Join(dir, logSlug(issue)+".log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+				_, _ = f.WriteString(line + "\n")
+				_ = f.Close()
+			}
+		}
+	}
 }
 
-// TaskStream returns the recorded live activity lines for a task (oldest first).
-func (o *Orchestrator) TaskStream(issue string) []string {
+// ensureTask returns the TaskActivity for an issue, creating it if needed. Caller holds o.mu.
+func (o *Orchestrator) ensureTask(issue string) *TaskActivity {
+	if o.taskLog == nil {
+		o.taskLog = map[string]*TaskActivity{}
+	}
+	t := o.taskLog[issue]
+	if t == nil {
+		t = &TaskActivity{Issue: issue, StartedAt: o.clock()()}
+		o.taskLog[issue] = t
+	}
+	return t
+}
+
+// SetTaskTokens records the LIVE (rough) token usage for the CURRENT run so the dashboard count moves
+// during a long run. It is a progress indicator only — the ACCURATE per-run totals are banked by
+// BankTaskTokens at each run boundary (from the provider's terminal result event). Task total shown =
+// banked (completed runs) + current-run live.
+func (o *Orchestrator) SetTaskTokens(issue string, in, out int) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]string(nil), o.taskStream[issue]...)
+	t := o.ensureTask(issue)
+	t.curIn, t.curOut = in, out
+	t.TokensIn = t.bankIn + t.curIn
+	t.TokensOut = t.bankOut + t.curOut
+}
+
+// BankTaskTokens adds one finished run's ACCURATE token totals (from the provider result event) to the
+// task total and clears the live current-run counters. Called once per Develop run (initial + each
+// improvement iteration), so the task total is the accurate sum across the whole task. Persists the new
+// totals so they survive a restart.
+func (o *Orchestrator) BankTaskTokens(issue string, in, out int) {
+	o.mu.Lock()
+	t := o.ensureTask(issue)
+	t.bankIn += in
+	t.bankOut += out
+	t.curIn, t.curOut = 0, 0
+	t.TokensIn = t.bankIn
+	t.TokensOut = t.bankOut
+	snap := snapshotActivityLocked(t)
+	dir := o.TaskLogDir
+	o.mu.Unlock()
+	o.writeActivity(dir, snap)
+}
+
+// TaskTokens returns the accurate cumulative (sent, received) tokens for a task.
+func (o *Orchestrator) TaskTokens(issue string) (in, out int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if t := o.taskLog[issue]; t != nil {
+		return t.TokensIn, t.TokensOut
+	}
+	return 0, 0
+}
+
+// TaskStream returns the recorded agent transcript for a task (oldest first). It reads the persisted
+// file when available (so DONE tasks / post-restart still show the full report), falling back to the
+// in-memory buffer.
+func (o *Orchestrator) TaskStream(issue string) []string {
+	o.mu.Lock()
+	mem := append([]string(nil), o.taskStream[issue]...)
+	dir := o.TaskLogDir
+	o.mu.Unlock()
+
+	if dir != "" {
+		if b, err := os.ReadFile(filepath.Join(dir, logSlug(issue)+".log")); err == nil {
+			lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+			if len(lines) > 4000 {
+				lines = lines[len(lines)-4000:]
+			}
+			if len(lines) >= len(mem) { // the file is the durable superset
+				return lines
+			}
+		}
+	}
+	if mem == nil {
+		return []string{} // never marshal null — the console expects an array
+	}
+	return mem
+}
+
+// logSlug makes a filesystem-safe file name from an issue key.
+func logSlug(issue string) string {
+	var b strings.Builder
+	for _, r := range issue {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	s := b.String()
+	if s == "" {
+		return "task"
+	}
+	return s
 }
 
 // Option configures the Orchestrator.
@@ -261,10 +388,10 @@ func (o *Orchestrator) count(name string) {
 	o.mu.Unlock()
 }
 
-// recordAction appends one action to a task's activity timeline (for the dashboard task boxes).
+// recordAction appends one action to a task's activity timeline (for the dashboard task boxes) and
+// persists the snapshot so the box + timeline survive a restart (write happens outside the lock).
 func (o *Orchestrator) recordAction(issue, stage, status, detail string) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	if o.taskLog == nil {
 		o.taskLog = map[string]*TaskActivity{}
 	}
@@ -287,6 +414,77 @@ func (o *Orchestrator) recordAction(issue, stage, status, detail string) {
 	t.Actions = append(t.Actions, TaskAction{Stage: stage, Status: status, Detail: detail, At: o.clock()()})
 	if stage == "runtime" && detail != "" {
 		t.Account = detail
+	}
+	snap := snapshotActivityLocked(t)
+	dir := o.TaskLogDir
+	o.mu.Unlock()
+	o.writeActivity(dir, snap)
+}
+
+// snapshotActivityLocked deep-copies a TaskActivity (caller holds o.mu) so it can be written to disk
+// outside the lock without racing further mutations.
+func snapshotActivityLocked(t *TaskActivity) *TaskActivity {
+	cp := *t
+	cp.Actions = append([]TaskAction(nil), t.Actions...)
+	return &cp
+}
+
+// writeActivity persists one task's activity snapshot (boxes + stage timeline + account + token totals)
+// to <TaskLogDir>/<slug>.activity.json so it survives a restart. Called after each stage transition
+// (infrequent). No-op when TaskLogDir is unset. Never holds o.mu.
+func (o *Orchestrator) writeActivity(dir string, t *TaskActivity) {
+	if dir == "" || t == nil {
+		return
+	}
+	b, err := json.Marshal(t)
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, logSlug(t.Issue)+".activity.json"), b, 0o644)
+}
+
+// loadActivity restores persisted task activity on startup so DONE/failed task boxes (with their stage
+// timeline and accurate token totals) remain visible after a restart. Prior token totals are banked so a
+// resumed run ADDS to them instead of resetting to zero.
+func (o *Orchestrator) loadActivity() {
+	dir := o.TaskLogDir
+	if dir == "" {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.taskLog == nil {
+		o.taskLog = map[string]*TaskActivity{}
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".activity.json") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var t TaskActivity
+		if json.Unmarshal(b, &t) != nil || t.Issue == "" {
+			continue
+		}
+		t.bankIn, t.bankOut = t.TokensIn, t.TokensOut // resumed runs add to the prior total
+		t.curIn, t.curOut = 0, 0
+		// Backfill the agent count for tasks that ran before it was tracked: count sub-agent spawns in
+		// the persisted transcript (+1 for the main agent).
+		if t.Agents == 0 {
+			if b, err := os.ReadFile(filepath.Join(dir, logSlug(t.Issue)+".log")); err == nil && len(b) > 0 {
+				t.Agents = strings.Count(string(b), "🤖 sub-agent") + 1
+			}
+		}
+		o.taskLog[t.Issue] = &t
 	}
 }
 
@@ -334,6 +532,20 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 // Recover runs on startup: reap expired leases, then resume unfinished assignments WITHOUT restarting
 // completed ones (terminal states are skipped). Leases are durable and re-acquired idempotently.
 func (o *Orchestrator) Recover(ctx context.Context) error {
+	// Restore the dashboard task boxes (timeline + tokens) persisted before the restart, then backfill a
+	// minimal box for any known assignment that predates activity persistence — so every task the engine
+	// has ever touched stays visible after a restart (the query overlays the live State from the Store).
+	o.loadActivity()
+	if all, err := o.Store.List(); err == nil {
+		o.mu.Lock()
+		for _, a := range all {
+			if _, ok := o.taskLog[a.IssueKey]; !ok {
+				o.taskLog[a.IssueKey] = &TaskActivity{Issue: a.IssueKey, State: string(a.State), StartedAt: o.clock()()}
+			}
+		}
+		o.mu.Unlock()
+	}
+
 	if n, err := o.Leases.Reap(); err == nil && n > 0 {
 		o.emit(controlplane.EventLeaseExpired, "lease", map[string]any{"reaped": n})
 	}
@@ -377,6 +589,12 @@ func (o *Orchestrator) Recover(ctx context.Context) error {
 // ProcessOnce claims and runs the next eligible issue. Returns did=false when there is nothing to do
 // (an idle engine is a success). It always goes Policy (budget) → then claim → Resource → Lease.
 func (o *Orchestrator) ProcessOnce(ctx context.Context) (bool, error) {
+	// Project gate: if deactivated (no active repo), claim nothing.
+	if o.WorkAllowed != nil {
+		if ok, _ := o.WorkAllowed(); !ok {
+			return false, nil
+		}
+	}
 	// Refresh policies (budget gate) — do not even claim work while paused.
 	bd := o.Policy.Budget.Decide(policy.BudgetInput{UsagePct: 0, UsageKnown: true})
 	o.emit(controlplane.EventPolicyDecision, "policy", map[string]any{"policy": "budget", "decision": pick(bd.Allow, "continue", "defer"), "reason": bd.Reason})
@@ -433,6 +651,12 @@ func (o *Orchestrator) claimNext(ctx context.Context) (*assignment.Assignment, I
 func (o *Orchestrator) RunIssue(ctx context.Context, key, account, operatorNote string) (bool, error) {
 	if key == "" {
 		return false, fmt.Errorf("issue key required")
+	}
+	// Project gate: a deactivated project (no active repo) can't be worked, even on a manual Run.
+	if o.WorkAllowed != nil {
+		if ok, reason := o.WorkAllowed(); !ok {
+			return false, fmt.Errorf("project is deactivated: %s", reason)
+		}
 	}
 	bd := o.Policy.Budget.Decide(policy.BudgetInput{UsagePct: 0, UsageKnown: true})
 	if !bd.Allow {

@@ -8,11 +8,22 @@ const availTone = (a) => ({ available: "ok", paused: "warn", cooldown: "info", o
 const healthTone = (h) => ({ healthy: "ok", degraded: "warn", down: "danger" }[h] || "");
 const usageTone = (p) => (p >= 90 ? "danger" : p >= 70 ? "warn" : "ok");
 
-function usageCell(pct, reset, min) {
+// usageBar renders a V1-style progress bar: fill = % used (green/amber/red), with % left + reset time.
+function usageBar(pct, reset, min) {
   if (pct == null) return el("span", { class: "sub" }, "—");
-  const left = 100 - pct;
-  const foot = reset ? ` · resets ${reset}` : min > 0 ? ` · ${min}m` : "";
-  return el("span", {}, badge(`${pct}% used`, usageTone(pct)), el("span", { class: "sub" }, ` ${left}% left${foot}`));
+  const w = Math.min(100, Math.max(0, pct));
+  const foot = reset ? `resets ${reset}` : min > 0 ? `${Math.floor(min / 60)}h ${min % 60}m` : "";
+  return el(
+    "div",
+    { class: "usage" },
+    el("div", { class: "usage-bar" }, el("div", { class: "usage-fill " + usageTone(pct), style: { width: w + "%" } })),
+    el(
+      "div",
+      { class: "usage-meta" },
+      el("span", { class: "usage-pct" }, `${pct}% used`),
+      el("span", { class: "sub" }, `${100 - pct}% left${foot ? " · " + foot : ""}`)
+    )
+  );
 }
 
 export default {
@@ -50,8 +61,8 @@ export default {
               { key: "name", label: "Account", mono: true },
               { key: "health", label: "Health", render: (r) => badge(r.health, healthTone(r.health)) },
               { key: "availability", label: "State", render: (r) => badge(r.availability, availTone(r.availability)) },
-              { key: "session", label: "5-hour", render: (r) => (r.u.ok ? usageCell(r.u.session_pct, r.u.session_reset, r.u.session_min) : el("span", { class: "sub" }, "—")) },
-              { key: "week", label: "7-day", render: (r) => (r.u.ok ? usageCell(r.u.week_pct, r.u.week_reset, r.u.week_min) : el("span", { class: "sub" }, "—")) },
+              { key: "session", label: "5-hour", render: (r) => (r.u.ok ? usageBar(r.u.session_pct, r.u.session_reset, r.u.session_min) : el("span", { class: "sub" }, "—")) },
+              { key: "week", label: "7-day", render: (r) => (r.u.ok ? usageBar(r.u.week_pct, r.u.week_reset, r.u.week_min) : el("span", { class: "sub" }, "—")) },
               {
                 key: "action",
                 label: "",
@@ -79,7 +90,7 @@ export default {
     }
 
     refreshBtn.onclick = async () => {
-      refreshBtn.textContent = "Refreshing… (~30s)";
+      refreshBtn.textContent = "Refreshing…";
       refreshBtn.disabled = true;
       try {
         await api.command("accounts.usage.refresh");
@@ -92,5 +103,8 @@ export default {
     };
 
     load();
+    // Keep the bars fresh while the page is open (the backend refreshes the real usage every 5 min).
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
   },
 };

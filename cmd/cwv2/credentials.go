@@ -244,8 +244,10 @@ func jiraBacklog(ctx context.Context, cli *jira.Client, projectKey string) (any,
 	if projectKey == "" {
 		projectKey = "SCRUM"
 	}
-	jql := fmt.Sprintf(`project = %s AND statusCategory != Done AND status not in (Cancel, Cancelled, Canceled) ORDER BY updated DESC`, projectKey)
-	res, err := cli.Search(ctx, jql, []string{"summary", "status", "priority", "labels"}, 50)
+	// All ACTIONABLE tasks (everything not Done/cancelled), HIGHEST priority first. Done tickets are
+	// excluded — they aren't runnable and only clutter the board.
+	jql := fmt.Sprintf(`project = %s AND statusCategory != Done AND status not in (Cancel, Cancelled, Canceled) ORDER BY priority DESC, updated DESC`, projectKey)
+	res, err := cli.Search(ctx, jql, []string{"summary", "status", "priority", "labels"}, 100)
 	if err != nil {
 		return nil, err
 	}

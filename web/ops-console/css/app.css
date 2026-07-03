@@ -83,7 +83,7 @@ a { color: var(--accent); text-decoration: none; }
 .topbar .spacer { flex: 1; }
 .conn { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; }
 
-.content { padding: 22px; max-width: 1500px; width: 100%; }
+.content { padding: 22px; max-width: 2200px; width: 100%; margin: 0 auto; }
 
 /* Status dot */
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); box-shadow: 0 0 0 3px color-mix(in oklab, var(--faint) 22%, transparent); display: inline-block; }
@@ -227,7 +227,8 @@ table.tbl td.mono, table.tbl td .mono { font-family: var(--mono); font-size: 12p
 /* ---- Mobile / phone responsiveness ---- */
 html, body { max-width: 100%; overflow-x: hidden; }         /* never scroll the page sideways */
 .tbl-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.tbl-wrap table.tbl { min-width: max-content; }             /* let the table be as wide as it needs, and scroll */
+.tbl-wrap table.tbl { min-width: 100%; }                    /* fill the container first (use wide screens); scroll only when truly too narrow */
+@media (max-width: 720px) { .tbl-wrap table.tbl { min-width: 620px; } }   /* on small screens keep columns legible + scroll */
 
 @media (max-width: 640px) {
   .content { padding: 12px; }
@@ -255,3 +256,34 @@ html, body { max-width: 100%; overflow-x: hidden; }         /* never scroll the 
 .drawer-foot { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border, #21262d); background: var(--surface, #161b22); }
 .drawer-msg { flex: 1; padding: 8px 11px; border-radius: 8px; border: 1px solid var(--border-strong, #30363d); background: var(--surface-2, #0d1117); color: var(--text, #e6edf3); font: inherit; font-size: 13px; }
 @media (max-width: 640px) { .drawer-foot { flex-wrap: wrap; } .drawer-msg { min-width: 0; } }
+
+/* Per-task token usage */
+.task-tok { font-size: 11.5px; font-weight: 600; color: var(--muted, #8b949e); font-variant-numeric: tabular-nums; }
+.drawer-tok { font-size: 12.5px; font-weight: 600; color: var(--muted, #8b949e); margin-right: 12px; font-variant-numeric: tabular-nums; }
+
+/* Important milestone lines in the agent report — bold, set off with "===" double rules top & bottom */
+.drawer-important { font-weight: 700; color: var(--text, #e6edf3); margin: 12px 0; padding: 8px 2px; border-top: 3px double var(--border-strong, #30363d); border-bottom: 3px double var(--border-strong, #30363d); letter-spacing: .2px; }
+.drawer-important.err { color: var(--danger, #f85149); border-color: var(--danger, #f85149); }
+
+/* Project switcher in the sidebar brand */
+.project-select { margin-top: 3px; width: 100%; max-width: 150px; font-size: 11.5px; padding: 3px 6px; border-radius: var(--radius-sm, 7px); border: 1px solid var(--border-strong, #30363d); background: var(--surface-2, #0d1117); color: var(--muted, #8b97a7); font-weight: 600; cursor: pointer; }
+.project-select:hover { color: var(--text, #e6edf3); border-color: var(--accent, #4f8cff); }
+
+/* Account usage progress bars (V1-style) */
+.usage { min-width: 150px; }
+.usage-bar { height: 8px; border-radius: 999px; background: var(--surface-2, #171e2b); border: 1px solid var(--border, #232c3d); overflow: hidden; }
+.usage-fill { height: 100%; border-radius: 999px; transition: width .4s ease; }
+.usage-fill.ok { background: var(--ok, #3fb950); }
+.usage-fill.warn { background: var(--warn, #d29922); }
+.usage-fill.danger { background: var(--danger, #f85149); }
+.usage-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; font-size: 11px; }
+.usage-meta .usage-pct { font-weight: 600; color: var(--text, #e6edf3); }
+
+/* Add-Project form + folder picker */
+.pf-field { display: block; margin-bottom: 10px; }
+.pf-label { display: block; font-size: 12px; color: var(--muted, #8b97a7); margin-bottom: 3px; font-weight: 600; }
+.pf-field .login-input { margin-bottom: 0; }
+.fp-list { display: flex; flex-direction: column; border: 1px solid var(--border, #232c3d); border-radius: var(--radius-sm, 7px); overflow: hidden; }
+.fp-row { padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border, #232c3d); }
+.fp-row:last-child { border-bottom: none; }
+.fp-row:hover { background: var(--surface-2, #171e2b); color: var(--accent, #4f8cff); }

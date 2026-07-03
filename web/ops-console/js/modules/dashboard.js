@@ -9,13 +9,26 @@ const stateTone = (s) => ({ done: "ok", failed: "danger", merging: "info", qa: "
 // Action status → glyph + tone for the per-task timeline.
 const actionGlyph = { done: { text: "✓", tone: "ok" }, running: { text: "running", tone: "warn" }, failed: { text: "✗", tone: "danger" } };
 const hhmmss = (iso) => String(iso || "").slice(11, 19) || "—";
+const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n || 0));
 
 // One task box: header (issue + state badge + account) and the ordered action timeline.
 function taskBox(t, agentCount) {
-  const actions = Array.isArray(t.actions) ? t.actions : [];
-  // Currently-running action = the LAST action whose status is "running".
+  const rawActions = Array.isArray(t.actions) ? t.actions : [];
+  // Collapse the timeline to ONE row per stage (the latest status), so a stage no longer shows both a
+  // "running" row AND a "done" row. Order follows each stage's first appearance (the pipeline order).
+  const byStage = new Map();
+  for (const a of rawActions) if (a && a.stage) byStage.set(a.stage, a);
+  const actions = [...byStage.values()];
+  // Once the TASK is finished (done/failed), nothing is "running" any more — a stage left in "running"
+  // just never got its terminal record (e.g. a timed-out develop). Resolve those to the task's outcome
+  // so the box turns green/red and STOPS blinking instead of pulsing "running" forever.
+  const terminal = t.state === "done" || t.state === "failed";
+  const effStatus = (s) => (terminal && s === "running" ? (t.state === "done" ? "done" : "failed") : s);
+  // Currently-running action = the LAST action whose (effective) status is "running".
   let running = null;
-  for (const a of actions) if (a && a.status === "running") running = a;
+  if (!terminal) for (const a of actions) if (a && a.status === "running") running = a;
+  // How many agents worked on this task — live lsof count while running, else the recorded historical count.
+  const agents = Math.max(agentCount || 0, t.agents || 0);
 
   // A failed task gets a Continue button right on the box (retry on a fresh account after an error).
   let continueBtn = null;
@@ -38,16 +51,22 @@ function taskBox(t, agentCount) {
     { class: "task-box-head" },
     el("span", { class: "task-issue mono" }, t.issue || "—"),
     badge(t.state || "—", stateTone(t.state)),
-    agentCount > 0 ? el("span", { class: "task-agents" }, "⚡ " + agentCount + " agent" + (agentCount === 1 ? "" : "s")) : null,
+    agents > 0 ? el("span", { class: "task-agents", title: terminal ? "agents that worked on this task" : "agents working now" }, "⚡ " + agents + " agent" + (agents === 1 ? "" : "s")) : null,
+    // Token chip: always visible for a live (non-terminal) task so the counter is present and ticks up;
+    // for finished tasks show it only if there were tokens.
+    t.tokens_in || t.tokens_out || (t.state && t.state !== "done" && t.state !== "failed")
+      ? el("span", { class: "task-tok", title: "tokens sent / received (live)" }, "↑" + fmtTok(t.tokens_in) + " ↓" + fmtTok(t.tokens_out))
+      : null,
     t.account ? el("span", { class: "task-acct" }, "on " + t.account) : null,
     continueBtn
   );
 
-  const nowLine = running ? el("div", { class: "task-now running" }, "▶ now: " + (running.stage || "—")) : null;
+  const nowLine = running ? el("div", { class: "task-now running" }, "▶ now: " + (running.stage || "—") + (running.detail ? " " + running.detail : "")) : null;
 
   const rows = actions.map((a) => {
-    const g = actionGlyph[a.status] || { text: a.status || "?", tone: "" };
-    const isRunning = a.status === "running";
+    const status = effStatus(a.status); // terminal task → no lingering "running" (green/red, no blink)
+    const g = actionGlyph[status] || { text: status || "?", tone: "" };
+    const isRunning = status === "running";
     return el(
       "div",
       { class: "task-action" + (isRunning ? " running" : "") },
@@ -74,6 +93,24 @@ function taskBox(t, agentCount) {
 // (thinking / doing / tool-use / responses). Polls task.stream and auto-scrolls; close to stop.
 function openTaskDrawer(issue) {
   const logEl = el("div", { class: "drawer-log" }, el("div", { class: "sub" }, "Waiting for agent output…"));
+  const tokEl = el("span", { class: "drawer-tok" });
+  let lastLines = []; // most recent narrative lines (for the Markdown export)
+  let lastTok = { in: 0, out: 0 };
+  // Export the current report as a Markdown (.md) document.
+  const mdBtn = el("button", { class: "btn", title: "Download this report as Markdown" }, "⬇ Markdown");
+  mdBtn.onclick = () => {
+    const md =
+      `# ${issue} — Agent Report\n\n` +
+      `> **Tokens:** ↑ ${fmtTok(lastTok.in)} sent · ↓ ${fmtTok(lastTok.out)} received\n\n---\n\n` +
+      lastLines
+        .map((l) => (/^(▶|🤖|🧑|✅|✔|🎯|🚀|⚠️|✨)/.test(l) || /\b(done|merged|completed|fixed|implemented)\b/i.test(l) ? `\n### ${l}\n` : `- ${l}`))
+        .join("\n") +
+      "\n";
+    const a = el("a", { href: "data:text/markdown;charset=utf-8," + encodeURIComponent(md), download: issue + "-report.md" });
+    document.body.append(a);
+    a.click();
+    a.remove();
+  };
   const closeBtn = el("button", { class: "btn" }, "✕ Close");
   // Optional message to the agent, sent with Continue (e.g. "the merge conflicted, rebase onto origin
   // and retry" or extra guidance).
@@ -106,7 +143,7 @@ function openTaskDrawer(issue) {
     el(
       "div",
       { class: "drawer" },
-      el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent output"), closeBtn),
+      el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent report"), tokEl, mdBtn, closeBtn),
       logEl,
       el("div", { class: "drawer-foot" }, msgInput, continueBtn)
     )
@@ -120,11 +157,24 @@ function openTaskDrawer(issue) {
     if (stopped) return;
     try {
       const res = await api.query("task.stream", { issue });
-      const lines = (res && res.lines) || [];
+      const raw = (res && res.lines) || [];
+      // BRIEF narrative report: show the agent's own words + milestones, hide the noisy raw tool-command
+      // dumps (e.g. "🔧 Bash — grep …") so it reads like a progress narrative, not a command log.
+      const lines = raw.filter((l) => !/^🔧/.test(l));
+      lastLines = lines;
+      if (res) {
+        lastTok = { in: res.tokens_in || 0, out: res.tokens_out || 0 };
+        tokEl.textContent = "↑" + fmtTok(res.tokens_in || 0) + " ↓" + fmtTok(res.tokens_out || 0) + " tokens";
+      }
       const isErr = (l) => /error|rate limit|limiting requests|overloaded|429|quota|usage limit|failed/i.test(l);
-      logEl.replaceChildren(
-        ...(lines.length ? lines.map((l) => el("div", { class: "drawer-line" + (isErr(l) ? " err" : "") }, l)) : [el("div", { class: "sub" }, "No agent output yet — the task may be starting.")])
-      );
+      // Milestones (agent start, sub-agent fan-out, operator note, completion cues) are IMPORTANT — show
+      // them bold, wrapped in "===" separator rules so they stand out from the running narrative.
+      const isImportant = (l) => /^(▶|🤖|🧑|✅|✔|🎯|🚀|⚠️|✨)/.test(l) || /\b(done|merged|completed|fixed|implemented)\b/i.test(l);
+      const lineEl = (l) =>
+        isImportant(l)
+          ? el("div", { class: "drawer-important" + (isErr(l) ? " err" : "") }, l)
+          : el("div", { class: "drawer-line" + (isErr(l) ? " err" : "") }, l);
+      logEl.replaceChildren(...(lines.length ? lines.map(lineEl) : [el("div", { class: "sub" }, "No agent output yet — the task may be starting.")]));
       if (atBottom) logEl.scrollTop = logEl.scrollHeight;
     } catch (e) {
       /* transient */
@@ -155,12 +205,15 @@ export default {
     const kEvents = el("div");
     const kpiGrid = el("div", { class: "grid cols-4 mb" }, kAssign, kVerify, kLease, kEvents);
 
+    // Live summary derived from the task data (updated every poll) — meaningful numbers, not session
+    // event counters.
+    let sum = { active: 0, done: 0, failed: 0, agents: 0, tokIn: 0, tokOut: 0 };
     function renderKpis() {
-      const c = store.get().counts;
-      kAssign.replaceChildren(kpi({ label: "Assignments", ico: "assignments", value: c.AssignmentCreated || 0, foot: `${c.AssignmentCompleted || 0} completed`, tone: "accent" }));
-      kVerify.replaceChildren(kpi({ label: "Verifications", ico: "verification", value: c.VerificationFinished || 0, foot: `${c.VerificationStarted || 0} started` }));
-      kLease.replaceChildren(kpi({ label: "Leases granted", ico: "leases", value: c.LeaseGranted || 0, foot: `${c.LeaseExpired || 0} expired` }));
-      kEvents.replaceChildren(kpi({ label: "Events (session)", ico: "metrics", value: store.get().events.length, foot: store.get().connected ? "live" : "offline" }));
+      const s = sum;
+      kAssign.replaceChildren(kpi({ label: "Active tasks", ico: "assignments", value: s.active, foot: `${s.agents} agent${s.agents === 1 ? "" : "s"} working`, tone: "accent" }));
+      kVerify.replaceChildren(kpi({ label: "Completed", ico: "verification", value: s.done, foot: `${s.failed} failed` }));
+      kLease.replaceChildren(kpi({ label: "Tokens sent", ico: "metrics", value: fmtTok(s.tokIn), foot: `↓ ${fmtTok(s.tokOut)} received` }));
+      kEvents.replaceChildren(kpi({ label: "Agents working", ico: "leases", value: s.agents, foot: store.get().connected ? "live" : "offline" }));
     }
 
     // Live activity feed.
@@ -194,18 +247,49 @@ export default {
       }
     }
 
-    // Per-task activity (one box per task, with its action timeline + currently-running action).
+    // Per-task activity (one box per task). Active/in-flight tasks and finished (Done/Failed) tasks are
+    // shown in SEPARATE sections so completed tickets have their own place.
     const tasksBody = el("div");
+    const doneBody = el("div");
+    const isDone = (s) => s === "done" || s === "failed";
     async function loadTasks() {
       try {
         const [tasks, agents] = await Promise.all([
           api.query("tasks.activity").then((x) => x || []),
           api.query("tasks.agents").catch(() => ({})),
         ]);
+        const active = tasks.filter((t) => !isDone(t.state));
+        // Done list: latest-finished first (by the time of the last action), capped at the last 100.
+        // Tasks with NO recorded actions (legacy boxes whose start time is reset each restart) have an
+        // unknown finish time → sort them to the BOTTOM so a freshly-finished task is always on top.
+        const finishedAt = (t) => {
+          if (!t.actions || !t.actions.length) return 0;
+          const ms = Date.parse(t.actions[t.actions.length - 1].at || "");
+          return isNaN(ms) ? 0 : ms;
+        };
+        const done = tasks
+          .filter((t) => isDone(t.state))
+          .sort((a, b) => finishedAt(b) - finishedAt(a))
+          .slice(0, 100);
+        // Update the live KPI summary from the same data.
+        sum = {
+          active: active.length,
+          done: tasks.filter((t) => t.state === "done").length,
+          failed: tasks.filter((t) => t.state === "failed").length,
+          agents: Object.values(agents || {}).reduce((a, b) => a + (b || 0), 0),
+          tokIn: tasks.reduce((a, t) => a + (t.tokens_in || 0), 0),
+          tokOut: tasks.reduce((a, t) => a + (t.tokens_out || 0), 0),
+        };
+        renderKpis();
         tasksBody.replaceChildren(
-          tasks.length
-            ? el("div", { class: "task-grid" }, ...tasks.map((t) => taskBox(t, (agents || {})[t.issue] || 0)))
-            : emptyState("No tasks yet", "Press Run on a Jira ticket or Start Working.")
+          active.length
+            ? el("div", { class: "task-grid" }, ...active.map((t) => taskBox(t, (agents || {})[t.issue] || 0)))
+            : emptyState("No active tasks", "Press Run on a Jira ticket or Start Working.")
+        );
+        doneBody.replaceChildren(
+          done.length
+            ? el("div", { class: "task-grid" }, ...done.map((t) => taskBox(t, 0)))
+            : emptyState("No finished tasks yet", "Completed and failed tickets land here.")
         );
       } catch (e) {
         tasksBody.replaceChildren(e instanceof NotWired ? notWired("tasks.activity") : emptyState("Unavailable", e.message));
@@ -230,7 +314,8 @@ export default {
     outlet.append(
       sectionHead("Operations overview", "The whole engineering system at a glance — live."),
       kpiGrid,
-      card("Tasks", tasksBody, { flush: true, sub: "per-task activity" }),
+      card("Active tasks", tasksBody, { flush: true, sub: "in flight — live" }),
+      card("Done", doneBody, { flush: true, sub: "completed & failed tickets" }),
       el("div", { class: "grid cols-2 mb" }, card("Live activity", feed, { flush: true, sub: "SSE", action: statusDot(store.get().connected ? "ok" : "danger", true) }), card("Current work", workBody, { sub: "assignments" })),
       card("System status", statusBody, { sub: "control plane" })
     );
@@ -241,7 +326,7 @@ export default {
     loadWork();
     loadTasks();
 
-    // React to events (never poll).
+    // React to events (SSE) for instant updates.
     const off = stream.on((ev) => {
       renderKpis();
       renderFeed();
@@ -255,9 +340,22 @@ export default {
     });
     const offStore = store.subscribe(() => {}); // keep store warm
 
+    // AUTO-UPDATE while the page is open: token counters (SetTaskTokens/BankTaskTokens) and the agent
+    // count do NOT emit SSE events, so poll the live Tasks + Work sections on a timer. Cheap in-memory
+    // reads; stops when you leave the page. This is what makes the token counter tick live.
+    const timer = setInterval(() => {
+      try {
+        loadTasks();
+        loadWork();
+      } catch (e) {
+        /* keep the dashboard alive even if a refresh throws */
+      }
+    }, 2500);
+
     return () => {
       off();
       offStore();
+      clearInterval(timer);
     };
   },
 };
