@@ -194,7 +194,8 @@ export default {
       readyBody.replaceChildren(el("div", { class: "notice danger" }, "Failed: " + (e && e.message ? e.message : e)));
     }
 
-    // Backlog + task status + accounts
+    // Backlog + task status + accounts. statusFilter persists across reloads (empty = show all).
+    const statusFilter = new Set();
     async function loadBacklog() {
       try {
         const [rows, tasks, resources] = await Promise.all([
@@ -262,20 +263,62 @@ export default {
           };
           return a;
         };
-        backlogBody.replaceChildren(
-          rows.length
-            ? table(
-                [
-                  { key: "key", label: "Key", mono: true, render: (r) => openCell(r.key, r) },
-                  { key: "summary", label: "Summary", render: (r) => openCell(r.summary, r) },
-                  { key: "status", label: "Status", render: (r) => badge(r.status) },
-                  { key: "priority", label: "Priority", render: (r) => badge(r.priority || "—", prioTone(r.priority)) },
-                  { key: "action", label: "", render: actionCell },
-                ],
-                rows
-              )
-            : emptyState("Backlog empty", "No open issues on the board.")
+
+        // Status filter bar: "All" + one selectable chip per status (multi-select). Empty = show all.
+        const counts = {};
+        rows.forEach((r) => (counts[r.status] = (counts[r.status] || 0) + 1));
+        const chip = (label, active, count, onClick) => {
+          const c = el("button", { class: "status-chip" + (active ? " active" : "") }, label, el("span", { class: "chip-n" }, String(count)));
+          c.onclick = onClick;
+          return c;
+        };
+        const filterBar = el(
+          "div",
+          { class: "status-filter" },
+          el("span", { class: "sub" }, "Status:"),
+          chip("All", statusFilter.size === 0, rows.length, () => {
+            statusFilter.clear();
+            renderList();
+          }),
+          ...Object.keys(counts)
+            .sort()
+            .map((s) =>
+              chip(s, statusFilter.has(s), counts[s], () => {
+                statusFilter.has(s) ? statusFilter.delete(s) : statusFilter.add(s);
+                renderList();
+              })
+            )
         );
+
+        function renderList() {
+          const filtered = statusFilter.size ? rows.filter((r) => statusFilter.has(r.status)) : rows;
+          // rebuild only the chips' active state + the table (cheap; no refetch)
+          filterBar.querySelectorAll(".status-chip").forEach((c, i) => {
+            if (i === 0) c.classList.toggle("active", statusFilter.size === 0);
+            else {
+              const s = Object.keys(counts).sort()[i - 1];
+              c.classList.toggle("active", statusFilter.has(s));
+            }
+          });
+          tableWrap.replaceChildren(
+            filtered.length
+              ? table(
+                  [
+                    { key: "key", label: "Key", mono: true, render: (r) => openCell(r.key, r) },
+                    { key: "summary", label: "Summary", render: (r) => openCell(r.summary, r) },
+                    { key: "status", label: "Status", render: (r) => badge(r.status) },
+                    { key: "priority", label: "Priority", render: (r) => badge(r.priority || "—", prioTone(r.priority)) },
+                    { key: "action", label: "", render: actionCell },
+                  ],
+                  filtered
+                )
+              : emptyState("Nothing matches", "No tasks with the selected status.")
+          );
+        }
+
+        const tableWrap = el("div");
+        backlogBody.replaceChildren(rows.length ? el("div", {}, filterBar, tableWrap) : emptyState("Backlog empty", "No open issues on the board."));
+        if (rows.length) renderList();
       } catch (e) {
         backlogBody.replaceChildren(el("div", { class: "notice danger" }, "Failed to load backlog: " + (e && e.message ? e.message : e)));
       }
