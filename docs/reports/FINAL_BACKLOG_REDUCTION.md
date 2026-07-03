@@ -18,7 +18,7 @@ Tracked launch/cutover items and their disposition this pass:
 
 | # | Item | Before | Action | After |
 |---|---|---|---|---|
-| 1 | Bootstrap repo URLs pointed at `github.com/example/*` (wrong org) | **defect** | Corrected to the real remotes `github.com/keyhan-azarjoo/{DotNet-IoT-MainWebApi,Flutter-IoT-MobileApp,NextJs-Myotgo-Website}` (verified against the working copies) | **RESOLVED** |
+| 1 | Bootstrap repo URLs pointed at `github.com/example/*` (wrong org) | **defect** | Corrected to the real remotes `github.com/keyhan-azarjoo/{DotNet-IoT-MainWebApi,Flutter-IoT-MobileApp,NextJs-Example-Website}` (verified against the working copies) | **RESOLVED** |
 | 2 | Per-repo build/verify commands undefined | open | Reconstructed from ground truth: .NET `dotnet build`/`dotnet test`; Flutter `flutter build/analyze/test`; Next.js `npm run build/lint/test`. `VERIFICATION_PLAN.md` + `serve --build-cmd/--api-url/--web-url` | **RESOLVED** |
 | 3 | Device/visual verification | software done, no procedure | Produced `DEVICE_VERIFICATION.md` (procedure, expected results, pass/fail criteria, troubleshooting). Software complete; only physical run remains | **RESOLVED (software)** |
 | 4 | Production cutover to `agents.example.com` | open | Investigated the host (read-only): it is the **shared Example production backend** (api/mongo/emqx/support-ai/mcp/marketing + Caddy). Stopping "all services/containers" would destroy production. Multiple valid placements remain | **BLOCKED — owner decision + prod-safety** |
