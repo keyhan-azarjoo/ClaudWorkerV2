@@ -188,7 +188,13 @@ func cmdServe(args []string) int {
 		return createProject(regPath, in)
 	})
 	if *web != "" {
-		mux.Handle("/", http.FileServer(http.Dir(*web)))
+		// no-cache = the browser may cache but MUST revalidate (If-Modified-Since → 304 when unchanged),
+		// so console updates always show up on a normal refresh instead of being served stale from cache.
+		fs := http.FileServer(http.Dir(*web))
+		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-cache")
+			fs.ServeHTTP(w, r)
+		}))
 	}
 	srv := &http.Server{Addr: *bind, Handler: mux}
 	go func() {
