@@ -16,9 +16,11 @@ import (
 func sentryClients() []*sentry.Client {
 	base := os.Getenv("SENTRY_API_BASE")
 	var out []*sentry.Client
+	// Each org needs a token that can actually READ its issues. For the 2nd org the working token is
+	// SENTRY_TOKEN_2_USER (SENTRY_TOKEN_2 lacks event:read → 403); fall back to it only if unset.
 	for _, p := range [][2]string{
 		{os.Getenv("SENTRY_ORG"), os.Getenv("SENTRY_TOKEN")},
-		{os.Getenv("SENTRY_ORG_2"), os.Getenv("SENTRY_TOKEN_2")},
+		{os.Getenv("SENTRY_ORG_2"), firstNonEmpty(os.Getenv("SENTRY_TOKEN_2_USER"), os.Getenv("SENTRY_TOKEN_2"))},
 	} {
 		if c := sentry.New(base, p[0], p[1]); c.Configured() {
 			out = append(out, c)
@@ -32,14 +34,16 @@ func recentFromAll(ctx context.Context, scs []*sentry.Client, period string, lim
 	seen := map[string]bool{}
 	var all []sentry.Issue
 	var firstErr error
+	anyOK := false
 	for _, sc := range scs {
 		iss, err := sc.RecentIssues(ctx, period, limit)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
-			continue
+			continue // one broken org must NOT mask a working one
 		}
+		anyOK = true
 		for _, is := range iss {
 			key := firstNonEmpty(is.ShortID, is.ID)
 			if seen[key] {
@@ -49,7 +53,8 @@ func recentFromAll(ctx context.Context, scs []*sentry.Client, period string, lim
 			all = append(all, is)
 		}
 	}
-	if len(all) == 0 && firstErr != nil {
+	// Only surface an error if EVERY org failed; a working org that returns 0 issues is a success.
+	if !anyOK && firstErr != nil {
 		return nil, firstErr
 	}
 	return all, nil
