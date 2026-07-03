@@ -38,7 +38,13 @@ const NAV = [
       { path: "/credentials", label: "Credentials", ico: "settings" },
     ],
   },
-  { group: "Knowledge", items: [{ path: "/knowledge", label: "Knowledge", ico: "knowledge" }] },
+  {
+    group: "Knowledge",
+    items: [
+      { path: "/rules", label: "Rules", ico: "policies" },
+      { path: "/knowledge", label: "Knowledge", ico: "knowledge" },
+    ],
+  },
   {
     group: "System",
     items: [
@@ -65,6 +71,7 @@ const MODULES = {
   "/runtimes": () => import("./modules/runtimes.js"),
   "/accounts": () => import("./modules/accounts.js"),
   "/credentials": () => import("./modules/credentials.js"),
+  "/rules": () => import("./modules/rules.js"),
   "/knowledge": () => import("./modules/knowledge.js"),
   "/metrics": () => import("./modules/metrics.js"),
   "/logs": () => import("./modules/logs.js"),

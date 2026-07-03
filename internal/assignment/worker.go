@@ -18,7 +18,8 @@ type WorkerInput struct {
 	AcceptanceCriteria string
 	RelevantFiles      []File
 	KnowledgeContext   string
-	OperatorNote       string // optional operator guidance passed on a manual Continue (what to do next)
+	OperatorNote       string   // optional operator guidance passed on a manual Continue (what to do next)
+	Rules              []string // standing rules every agent MUST follow before making any change
 }
 
 // File is a path + content pair used both for relevant-file context and for proposed writes.

@@ -17,6 +17,26 @@ func sampleInput() assignment.WorkerInput {
 	}
 }
 
+// TestBuildPromptInjectsRules guards that operator RULES reach the agent's prompt (in a clearly-marked
+// section) so the main agent reads them before making any change.
+func TestBuildPromptInjectsRules(t *testing.T) {
+	in := sampleInput()
+	in.Rules = []string{"UI parity: change every platform together", "Verify before done"}
+	p := BuildPrompt(in)
+	if !strings.Contains(p, "RULES") {
+		t.Fatalf("prompt has no RULES section:\n%s", p)
+	}
+	for _, r := range in.Rules {
+		if !strings.Contains(p, r) {
+			t.Errorf("prompt missing rule %q", r)
+		}
+	}
+	// No rules → no RULES section (and still deterministic).
+	if strings.Contains(BuildPrompt(sampleInput()), "RULES") {
+		t.Error("empty rules should not emit a RULES section")
+	}
+}
+
 func TestBuildPromptDeterministic(t *testing.T) {
 	in := sampleInput()
 	first := BuildPrompt(in)
