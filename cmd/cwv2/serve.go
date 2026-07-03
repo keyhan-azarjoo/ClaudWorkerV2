@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -32,8 +33,37 @@ import (
 	"github.com/myotgo/ClaudWorkerV2/internal/policy"
 	"github.com/myotgo/ClaudWorkerV2/internal/resource"
 	"github.com/myotgo/ClaudWorkerV2/internal/secrets"
+	"github.com/myotgo/ClaudWorkerV2/internal/sentry"
 	"github.com/myotgo/ClaudWorkerV2/internal/verify"
 )
+
+// sentrySyncLoop periodically turns new Sentry errors into Jira bugs (enabled by CWV2_SENTRY_SYNC=1).
+// It is idempotent + capped by sentrySync, so a sweep never floods the board.
+func sentrySyncLoop(ctx context.Context, jc *jira.Client, scs []*sentry.Client, projectKey string, cp *controlplane.Server) {
+	t := time.NewTicker(15 * time.Minute)
+	defer t.Stop()
+	run := func() {
+		res, err := sentrySync(ctx, jc, scs, projectKey, 10)
+		if err != nil {
+			if cp != nil {
+				cp.Bus().Publish("SentrySyncFailed", "sentry", map[string]any{"error": err.Error()})
+			}
+			return
+		}
+		if cp != nil {
+			cp.Bus().Publish("SentrySynced", "sentry", res)
+		}
+	}
+	run() // once at startup
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+		}
+	}
+}
 
 func serveUsage() {
 	fmt.Fprint(os.Stderr, `cwv2 serve — run the Orchestrator + Control Plane (the serve loop)
@@ -104,6 +134,16 @@ func cmdServe(args []string) int {
 	cp.Command("accounts.usage.refresh", func(ctx context.Context, _ []byte) (any, error) {
 		return um.refresh(ctx, time.Now()), nil
 	})
+	// Keep the usage bars live: refresh the real subscription usage (headless OAuth endpoint) at startup
+	// and every 5 minutes.
+	go func() {
+		um.refresh(context.Background(), time.Now())
+		t := time.NewTicker(5 * time.Minute)
+		defer t.Stop()
+		for range t.C {
+			um.refresh(context.Background(), time.Now())
+		}
+	}()
 
 	if *once {
 		did, err := o.ProcessOnce(context.Background())
@@ -121,6 +161,26 @@ func cmdServe(args []string) int {
 	// HTTP: Control Plane API under /v1, optional static Operations Console at /.
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", cp.Handler())
+	// Multi-project on the SAME url: each sub-project is its OWN isolated cwv2 instance (own config,
+	// secrets, engine home, tasks + data — nothing shared), reverse-proxied under /p/<slug>/. The
+	// switcher reads projects.list. Sub-projects are added via scripts/cwv2-new-project.sh.
+	regPath := projectsRegistryPath(*cfgPath)
+	mux.Handle("/p/", &projectRouter{registryPath: regPath}) // dynamic — new projects proxy without restart
+	cp.Query("projects.list", func(context.Context, url.Values) (any, error) {
+		return projectsList(cfg.Project, loadProjectsRegistry(regPath)), nil
+	})
+	// Folder picker for the Add-Project UI (read-only directory listing).
+	cp.Query("fs.dirs", func(_ context.Context, q url.Values) (any, error) {
+		return listDirs(q.Get("path"))
+	})
+	// Create a NEW isolated project from the console (scaffold + register + start). Same URL, own data.
+	cp.Command("projects.create", func(_ context.Context, body []byte) (any, error) {
+		var in createProjectInput
+		if err := json.Unmarshal(body, &in); err != nil {
+			return nil, fmt.Errorf("bad request: %w", err)
+		}
+		return createProject(regPath, in)
+	})
 	if *web != "" {
 		mux.Handle("/", http.FileServer(http.Dir(*web)))
 	}
@@ -132,6 +192,10 @@ func cmdServe(args []string) int {
 			stop()
 		}
 	}()
+
+	// Device Log Monitor: capture ESP32 serial logs every ~6m, detect faults, auto-file Jira,
+	// and expose them to the console (devicemonitor.* queries). Panic-guarded; exits on ctx.Done().
+	StartDeviceMonitor(ctx, log, *cfg, cp)
 
 	// Run the orchestration loop until shutdown.
 	errCh := make(chan error, 1)
@@ -259,18 +323,82 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 	})
 	o.RegisterControlPlane()
 
-	// Stream each worker's live activity (thinking/doing/tool-use) into the per-task log for the console.
+	// Persist per-task agent transcripts under the engine home so DONE tasks keep their full report
+	// (survives restarts). Then stream each worker's live activity into that per-task log.
+	if l.ProjectDir != "" {
+		o.TaskLogDir = filepath.Join(l.ProjectDir, "task-logs")
+	}
 	if worker != nil {
 		worker.OnLog = func(issue, line string) { o.AppendTaskLog(issue, line) }
+		worker.OnTokens = func(issue string, in, out int) { o.SetTaskTokens(issue, in, out) }
+		worker.OnTokensDone = func(issue string, in, out int) { o.BankTaskTokens(issue, in, out) }
+	}
+
+	// Repositories (Git page): the project's managed repos with active/inactive state + org discovery.
+	// Deactivating EVERY repo turns the project OFF — the work gate then refuses all agent work.
+	if live && l.ProjectDir != "" {
+		rs := newRepoStore(l.ProjectDir, cfg.Repos)
+		o.WorkAllowed = func() (bool, string) {
+			if rs.anyActive() {
+				return true, ""
+			}
+			return false, "all repositories are deactivated"
+		}
+		cp.Query("repos.list", func(context.Context, url.Values) (any, error) { return rs.load(), nil })
+		cp.Query("github.repos", func(ctx context.Context, q url.Values) (any, error) {
+			return githubRepos(ctx, q.Get("owner"))
+		})
+		cp.Command("repos.add", func(_ context.Context, body []byte) (any, error) {
+			var r struct {
+				Name string `json:"name"`
+				URL  string `json:"url"`
+			}
+			_ = json.Unmarshal(body, &r)
+			return rs.add(r.Name, r.URL)
+		})
+		cp.Command("repos.remove", func(_ context.Context, body []byte) (any, error) {
+			var r struct {
+				Name string `json:"name"`
+			}
+			_ = json.Unmarshal(body, &r)
+			return rs.remove(r.Name), nil
+		})
+		cp.Command("repos.setActive", func(_ context.Context, body []byte) (any, error) {
+			var r struct {
+				Name   string `json:"name"`
+				Active bool   `json:"active"`
+			}
+			_ = json.Unmarshal(body, &r)
+			return rs.setActive(r.Name, r.Active), nil
+		})
 	}
 
 	// Live Jira page becomes real.
 	if liveJira != nil {
+		projectKey := projectKeyFromJQL(cfg.Jira.WorkJQL)
 		cp.Query("jira.queue", func(ctx context.Context, _ url.Values) (any, error) { return liveJira.Queue(ctx) })
-		// jira.backlog: the actual open board (not just ready-to-work) so the console shows real tasks.
+		// jira.backlog: ALL project tasks, highest priority first (the console shows the real board).
 		cp.Query("jira.backlog", func(ctx context.Context, _ url.Values) (any, error) {
-			return jiraBacklog(ctx, jiraClient, projectKeyFromJQL(cfg.Jira.WorkJQL))
+			return jiraBacklog(ctx, jiraClient, projectKey)
 		})
+		// Sentry → Jira: create a HIGH-priority Bug for each new Sentry error (labelled, deduped, capped;
+		// no "ready" label so no agent auto-runs it — the operator Runs it when they want).
+		scs := sentryClients() // one client per configured Sentry org (both myotgo orgs)
+		// Read-only preview of recent Sentry errors (no tickets created) — verifies connectivity + lets
+		// the operator see what a sync would turn into bugs.
+		cp.Query("sentry.errors", func(ctx context.Context, _ url.Values) (any, error) {
+			if len(scs) == 0 {
+				return []any{}, nil
+			}
+			return recentFromAll(ctx, scs, "14d", 25)
+		})
+		cp.Command("sentry.sync", func(ctx context.Context, _ []byte) (any, error) {
+			return sentrySync(ctx, jiraClient, scs, projectKey, 10)
+		})
+		// Optional periodic sync (off by default; set CWV2_SENTRY_SYNC=1 to enable a background sweep).
+		if os.Getenv("CWV2_SENTRY_SYNC") == "1" && len(scs) > 0 {
+			go sentrySyncLoop(context.Background(), jiraClient, scs, projectKey, cp)
+		}
 	}
 	// Live Git state → Control Plane (active worktrees, merge/conflict/cleanup status).
 	if gitA != nil {

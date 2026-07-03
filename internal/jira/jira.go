@@ -193,6 +193,46 @@ func (c *Client) Search(ctx context.Context, jql string, fields []string, maxRes
 	return res, err
 }
 
+// CreateIssueInput describes a new issue to create.
+type CreateIssueInput struct {
+	ProjectKey  string
+	Summary     string
+	Description string
+	IssueType   string // e.g. "Bug", "Task" (default "Task")
+	Priority    string // e.g. "High", "Highest" (optional — some projects lack the field)
+	Labels      []string
+}
+
+// CreateIssue creates a new issue (POST /issue) and returns its key. Priority is best-effort: if the
+// project rejects the priority field, the caller can retry without it.
+func (c *Client) CreateIssue(ctx context.Context, in CreateIssueInput) (string, error) {
+	if in.IssueType == "" {
+		in.IssueType = "Task"
+	}
+	fields := map[string]any{
+		"project":   map[string]any{"key": in.ProjectKey},
+		"summary":   in.Summary,
+		"issuetype": map[string]any{"name": in.IssueType},
+	}
+	if in.Priority != "" {
+		fields["priority"] = map[string]any{"name": in.Priority}
+	}
+	if len(in.Labels) > 0 {
+		fields["labels"] = in.Labels
+	}
+	if in.Description != "" {
+		fields["description"] = adfDoc(in.Description)
+	}
+	var out struct {
+		Key string `json:"key"`
+	}
+	err := c.do(ctx, "create_issue", http.MethodPost, "/rest/api/3/issue", map[string]any{"fields": fields}, &out)
+	if err != nil {
+		return "", err
+	}
+	return out.Key, nil
+}
+
 // GetIssue fetches one issue (GET /issue/{key}).
 func (c *Client) GetIssue(ctx context.Context, key string) (Issue, error) {
 	var iss Issue

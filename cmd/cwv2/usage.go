@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -51,9 +53,6 @@ func (u *usageMonitor) snapshot() map[string]usageEntry {
 
 // refresh probes every claude account and updates the cache. Returns the fresh snapshot.
 func (u *usageMonitor) refresh(ctx context.Context, now time.Time) map[string]usageEntry {
-	if u.script == "" {
-		return u.snapshot()
-	}
 	home, _ := os.UserHomeDir()
 	for _, a := range u.accounts {
 		if a.Engine != "" && a.Engine != "claude" {
@@ -72,29 +71,97 @@ func (u *usageMonitor) refresh(ctx context.Context, now time.Time) map[string]us
 	return u.snapshot()
 }
 
-// probe runs the usage probe for one config dir (bounded by a timeout).
+// probe fetches one account's LIVE subscription usage from Anthropic's OAuth usage endpoint — the same
+// data as the in-app /usage page (5-hour + 7-day % used + reset times). Fully headless: no browser, no
+// interactive CLI. utilization = % USED.
 func (u *usageMonitor) probe(ctx context.Context, configDir string) usageEntry {
-	cctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	tok := oauthAccessToken(configDir)
+	if tok == "" {
+		return usageEntry{}
+	}
+	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(cctx, "python3", u.script, configDir).Output()
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, "https://api.anthropic.com/api/oauth/usage", nil)
 	if err != nil {
 		return usageEntry{}
 	}
-	var raw struct {
-		OK              bool   `json:"ok"`
-		Session         int    `json:"session"`
-		Week            int    `json:"week"`
-		SessionResetMin int    `json:"sessionResetMin"`
-		WeekResetMin    int    `json:"weekResetMin"`
-		SessionReset    string `json:"sessionReset"`
-		WeekReset       string `json:"weekReset"`
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if err != nil {
+		return usageEntry{}
 	}
-	if err := json.Unmarshal(out, &raw); err != nil {
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return usageEntry{}
+	}
+	var raw struct {
+		FiveHour window `json:"five_hour"`
+		SevenDay window `json:"seven_day"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&raw) != nil {
 		return usageEntry{}
 	}
 	return usageEntry{
-		SessionPct: raw.Session, WeekPct: raw.Week,
-		SessionReset: raw.SessionReset, WeekReset: raw.WeekReset,
-		SessionMin: raw.SessionResetMin, WeekMin: raw.WeekResetMin, OK: raw.OK,
+		SessionPct:   int(raw.FiveHour.Utilization + 0.5),
+		WeekPct:      int(raw.SevenDay.Utilization + 0.5),
+		SessionReset: humanReset(raw.FiveHour.ResetsAt),
+		WeekReset:    humanReset(raw.SevenDay.ResetsAt),
+		SessionMin:   minsUntil(raw.FiveHour.ResetsAt),
+		WeekMin:      minsUntil(raw.SevenDay.ResetsAt),
+		OK:           true,
 	}
+}
+
+type window struct {
+	Utilization float64 `json:"utilization"`
+	ResetsAt    string  `json:"resets_at"`
+}
+
+// oauthAccessToken resolves an account's OAuth access token headlessly: the per-account credentials file
+// if present, else the macOS login keychain (service "Claude Code-credentials", read with no GUI prompt).
+func oauthAccessToken(configDir string) string {
+	parse := func(b []byte) string {
+		var c struct {
+			ClaudeAiOauth struct {
+				AccessToken string `json:"accessToken"`
+			} `json:"claudeAiOauth"`
+		}
+		if json.Unmarshal(b, &c) == nil {
+			return c.ClaudeAiOauth.AccessToken
+		}
+		return ""
+	}
+	if configDir != "" {
+		if b, err := os.ReadFile(filepath.Join(configDir, ".credentials.json")); err == nil {
+			if t := parse(b); t != "" {
+				return t
+			}
+		}
+	}
+	out, err := exec.Command("security", "find-generic-password", "-s", "Claude Code-credentials", "-w").Output()
+	if err != nil {
+		return ""
+	}
+	return parse(out)
+}
+
+// minsUntil returns whole minutes from now until an ISO timestamp (0 if past/unparseable).
+func minsUntil(iso string) int {
+	t, err := time.Parse(time.RFC3339, iso)
+	if err != nil {
+		return 0
+	}
+	if d := time.Until(t); d > 0 {
+		return int(d.Minutes())
+	}
+	return 0
+}
+
+// humanReset formats an ISO reset time in local time (e.g. "Mon 9:59am").
+func humanReset(iso string) string {
+	t, err := time.Parse(time.RFC3339, iso)
+	if err != nil {
+		return ""
+	}
+	return t.Local().Format("Mon 3:04pm")
 }
