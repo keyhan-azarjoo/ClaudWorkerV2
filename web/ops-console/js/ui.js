@@ -89,7 +89,8 @@ export function table(columns, rows) {
       {},
       ...columns.map((c) => {
         const v = c.render ? c.render(r) : r[c.key];
-        const td = el("td", { class: c.mono ? "mono" : "" });
+        // data-label drives the mobile "stacked card" layout (each cell shows its column name).
+        const td = el("td", { class: c.mono ? "mono" : "", "data-label": c.label || "" });
         if (v == null) td.textContent = "—";
         else if (v.nodeType) td.append(v);
         else td.textContent = String(v);
