@@ -52,6 +52,10 @@ func adfDoc(text string) map[string]any {
 	}
 }
 
+// ADFToText is the exported flattener (ADF document or plain string → text) for callers outside the
+// package (e.g. the ticket detail view).
+func ADFToText(raw json.RawMessage) string { return adfToText(raw) }
+
 // adfToText flattens an ADF document (or a plain string) into text, concatenating all text nodes with
 // newlines between paragraphs. Deterministic and dependency-free.
 func adfToText(raw json.RawMessage) string {

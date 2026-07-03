@@ -425,6 +425,47 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 	if liveJira != nil {
 		projectKey := projectKeyFromJQL(cfg.Jira.WorkJQL)
 		cp.Query("jira.queue", func(ctx context.Context, _ url.Values) (any, error) { return liveJira.Queue(ctx) })
+
+		// Ticket detail (data + comments + transitions), status change/cancel, and a per-ticket AI chat.
+		cp.Query("jira.issue", func(ctx context.Context, q url.Values) (any, error) {
+			return jiraIssueDetail(ctx, jiraClient, q.Get("key"))
+		})
+		cp.Command("jira.transition", func(ctx context.Context, body []byte) (any, error) {
+			var r struct{ Key, To string }
+			_ = json.Unmarshal(body, &r)
+			if strings.TrimSpace(r.Key) == "" || strings.TrimSpace(r.To) == "" {
+				return nil, fmt.Errorf("key and target status are required")
+			}
+			tr, err := jiraClient.TransitionTo(ctx, r.Key, r.To)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"key": r.Key, "status": tr.To.Name}, nil
+		})
+		// Per-ticket conversation: explain (ticket text only) or investigate (+ save to Jira). Async.
+		var chatRepo string
+		if len(cfg.Repos) > 0 && l.ProjectDir != "" {
+			chatRepo = filepath.Join(l.ProjectDir, "repos", cfg.Repos[0].Name)
+		}
+		tchat := newTicketChat(l.ProjectDir, chatRepo, claudeBin, firstClaudeConfigDir(cfg.Accounts), jiraClient)
+		cp.Query("ticket.conversation", func(_ context.Context, q url.Values) (any, error) {
+			return tchat.conversation(q.Get("key")), nil
+		})
+		cp.Command("ticket.chat", func(_ context.Context, body []byte) (any, error) {
+			var r struct {
+				Key         string `json:"key"`
+				Message     string `json:"message"`
+				Investigate bool   `json:"investigate"`
+			}
+			_ = json.Unmarshal(body, &r)
+			if strings.TrimSpace(r.Key) == "" || strings.TrimSpace(r.Message) == "" {
+				return nil, fmt.Errorf("key and message are required")
+			}
+			if err := tchat.send(r.Key, r.Message, r.Investigate); err != nil {
+				return nil, err
+			}
+			return map[string]any{"key": r.Key, "queued": true}, nil
+		})
 		// jira.backlog: ALL project tasks, highest priority first (the console shows the real board).
 		cp.Query("jira.backlog", func(ctx context.Context, _ url.Values) (any, error) {
 			return jiraBacklog(ctx, jiraClient, projectKey)
