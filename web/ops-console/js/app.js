@@ -243,7 +243,9 @@ async function build() {
 
   const outlet = el("div", { class: "content" });
   const main = el("main", { class: "main" }, topbar, outlet);
-  app.append(sidebar, main);
+  // Scrim behind the mobile nav drawer — tap outside to close.
+  const scrim = el("div", { class: "nav-scrim", onClick: () => app.classList.remove("nav-open") });
+  app.append(sidebar, main, scrim);
 
   // Live connection state
   const stream = new EventStream();
