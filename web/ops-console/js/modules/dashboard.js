@@ -111,6 +111,23 @@ function openTaskDrawer(issue) {
     a.click();
     a.remove();
   };
+  // Copy the whole report to the clipboard (selection survives even though the log refreshes live).
+  const copyBtn = el("button", { class: "btn", title: "Copy the whole report" }, "⧉ Copy");
+  copyBtn.onclick = async () => {
+    const text = lastLines.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = el("textarea", { style: "position:fixed;opacity:0" });
+      ta.value = text;
+      document.body.append(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    copyBtn.textContent = "✓ Copied";
+    setTimeout(() => (copyBtn.textContent = "⧉ Copy"), 1500);
+  };
   const closeBtn = el("button", { class: "btn" }, "✕ Close");
   // Optional message to the agent, sent with Continue (e.g. "the merge conflicted, rebase onto origin
   // and retry" or extra guidance).
@@ -143,13 +160,14 @@ function openTaskDrawer(issue) {
     el(
       "div",
       { class: "drawer" },
-      el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent report"), tokEl, mdBtn, closeBtn),
+      el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent report"), tokEl, copyBtn, mdBtn, closeBtn),
       logEl,
       el("div", { class: "drawer-foot" }, msgInput, continueBtn)
     )
   );
   let stopped = false;
   let atBottom = true;
+  let renderedSig = "";
   logEl.addEventListener("scroll", () => {
     atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
   });
@@ -174,8 +192,14 @@ function openTaskDrawer(issue) {
         isImportant(l)
           ? el("div", { class: "drawer-important" + (isErr(l) ? " err" : "") }, l)
           : el("div", { class: "drawer-line" + (isErr(l) ? " err" : "") }, l);
-      logEl.replaceChildren(...(lines.length ? lines.map(lineEl) : [el("div", { class: "sub" }, "No agent output yet — the task may be starting.")]));
-      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+      // Only re-render when the content actually changed — otherwise a live refresh every 1.5s would wipe
+      // your text selection and fight your scrolling. Signature = line count + last line.
+      const sig = lines.length + "|" + (lines[lines.length - 1] || "");
+      if (sig !== renderedSig) {
+        renderedSig = sig;
+        logEl.replaceChildren(...(lines.length ? lines.map(lineEl) : [el("div", { class: "sub" }, "No agent output yet — the task may be starting.")]));
+        if (atBottom) logEl.scrollTop = logEl.scrollHeight; // follow only if you're already at the bottom
+      }
     } catch (e) {
       /* transient */
     }
