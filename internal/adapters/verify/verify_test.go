@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	"claudworker/internal/orchestrator"
+	"claudworker/internal/verify"
 )
 
 // ensure the adapter satisfies the orchestrator port.

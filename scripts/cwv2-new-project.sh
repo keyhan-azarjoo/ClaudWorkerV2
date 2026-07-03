@@ -1,6 +1,6 @@
 #!/bin/bash
 # cwv2-new-project.sh — scaffold a NEW, fully-isolated ClaudWorker project (e.g. Chida) alongside the
-# default MyOTGO one. Each project is its OWN cwv2 instance: its own config, engine home (assignments,
+# default one. Each project is its OWN cwv2 instance: its own config, engine home (assignments,
 # worktrees, task-logs, knowledge, leases), secrets/credentials, port and launchd service — nothing is
 # shared with any other project.
 #
@@ -30,6 +30,7 @@ cat > "$DIR/cwv2.yaml" <<YAML
 project: $SLUG
 engine_home: $HOMED
 github:
+  commit_identity: { name: "$(git config user.name 2>/dev/null || echo ClaudWorker)", email: "$(git config user.email 2>/dev/null || echo claudworker@localhost)" }   # <-- EDIT if needed
 repos:
   - name: backend
     dev_branch: development
@@ -92,12 +93,12 @@ print(f"   registered {slug} → port {port} in {reg}")
 PY
 
 # --- launchd service ---
-PLIST="$HOME/Library/LaunchAgents/com.myotgo.cwv2-$SLUG.plist"
+PLIST="$HOME/Library/LaunchAgents/com.claudworker.$SLUG.plist"
 cat > "$PLIST" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>com.myotgo.cwv2-$SLUG</string>
+  <key>Label</key><string>com.claudworker.$SLUG</string>
   <key>ProgramArguments</key><array>
     <string>/usr/bin/caffeinate</string><string>-is</string>
     <string>/bin/bash</string><string>$DIR/run.sh</string>
@@ -116,15 +117,16 @@ cat <<DONE
    config:  $DIR/cwv2.yaml         (edit repo/Jira/accounts)
    secrets: $DIR/secrets/live.env  (fill in — chmod 600)
    port:    127.0.0.1:$PORT
-   service: com.myotgo.cwv2-$SLUG
+   service: com.claudworker.$SLUG
 
 Next:
   1) Edit $DIR/cwv2.yaml and $DIR/secrets/live.env with THIS project's repo, Jira, accounts, tokens.
   2) Create its account login dir(s): CLAUDE_CONFIG_DIR=$HOME/.cw-accounts/$SLUG claude   (log in)
   3) Load it:   launchctl load $PLIST
-  4) Restart the MAIN instance so it proxies /p/$SLUG/ + lists it in the switcher:
-       launchctl kickstart -k gui/\$(id -u)/com.myotgo.cwv2-live
+  4) Restart the MAIN instance so it proxies /p/$SLUG/ + lists it in the switcher (use your main
+     service label, e.g.):
+       launchctl kickstart -k gui/\$(id -u)/<your-main-cwv2-service-label>
 
-Then it's reachable on the SAME url:  https://agents.myotgo.com/p/$SLUG/  (its own console + token).
+Then it's reachable on the SAME url as the main console, at  /p/$SLUG/  (its own console + token).
 Everything (tasks, data, worktrees, credentials, Jira, accounts) stays isolated under $DIR — nothing shared.
 DONE

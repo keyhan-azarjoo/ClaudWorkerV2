@@ -120,14 +120,14 @@ one or more principles from [00_Vision](00_Vision.md) (P1–P10).
   expire/roll back, partial branches are detectable and cleanable, no half-merges to `development`.
 - **NFR-9 (Observability)** Every run is traceable end-to-end from Jira issue → branch → checks →
   merge via logs + dashboard.
-- **NFR-10 (Portability, P10)** No hard-coded MyOTGO assumptions in engine core; all such details
+- **NFR-10 (Portability, P10)** No hard-coded Example assumptions in engine core; all such details
   live in config/plugins.
 - **NFR-11 (Owner coexistence)** The owner can commit at any time; the engine detects and adapts,
   never overwrites, and never blocks the owner.
 
 ## Explicit constraints (from owner rules)
 
-- **C-1** V2 must not modify V1 (`Claud_worker_agent/`, `myotgo/claudworker_myotgo`). Separate repo,
+- **C-1** V2 must not modify V1 (`Claud_worker_agent/`, `example/claudworker_example`). Separate repo,
   separate state.
 - **C-2** Commit/branch/PR identity is always `keyhanazarjoo <keyhanazarjoo@gmail.com>` — no
   `Co-Authored-By: Claude`, no org author. Remote ops via GitHub user `keyhan-azarjoo`.

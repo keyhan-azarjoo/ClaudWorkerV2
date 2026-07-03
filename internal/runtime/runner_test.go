@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
+	"claudworker/internal/assignment"
 )
 
 // fakeRuntime returns a scripted (Response,error) per call; the last repeats after exhaust. It also

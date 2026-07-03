@@ -6,7 +6,7 @@ deterministic validations, dashboard — **before the first Assignment starts**.
 migration completes and the owner approves the report.
 
 > **Reusable and project-agnostic (P10).** Migration is engine machinery driven by config + plugins;
-> nothing in it is MyOTGO-specific. Onboarding project #2 runs the identical pipeline against a
+> nothing in it is Example-specific. Onboarding project #2 runs the identical pipeline against a
 > different `cwv2.yaml`.
 
 > **Mostly deterministic (P5).** Every step that can be a program is Go (repo scan, build/test/lint,

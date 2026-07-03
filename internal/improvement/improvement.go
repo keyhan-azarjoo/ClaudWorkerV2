@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	"claudworker/internal/verify"
 )
 
 // Category documents the KIND of improvement an iteration made (observability). The engine does not

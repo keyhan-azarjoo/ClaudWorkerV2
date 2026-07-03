@@ -3,8 +3,8 @@ package doctor
 import (
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
-	"github.com/myotgo/ClaudWorkerV2/internal/secrets"
+	"claudworker/internal/config"
+	"claudworker/internal/secrets"
 )
 
 func testConfig(t *testing.T, engineHome string) *config.Config {

@@ -1,4 +1,4 @@
-module github.com/myotgo/ClaudWorkerV2
+module claudworker
 
 go 1.26.4
 

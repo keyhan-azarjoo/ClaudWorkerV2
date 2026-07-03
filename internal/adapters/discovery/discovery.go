@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
+	"claudworker/internal/resource"
 )
 
 // CmdRunner runs a command and returns combined output (injectable for tests).

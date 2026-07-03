@@ -1,7 +1,7 @@
 // Package config loads and validates the ClaudWorker V2 project configuration.
 //
 // Config is the ONLY project-specific surface (docs/13_Config.md, Law 16). Nothing here is
-// MyOTGO-specific. Thresholds are configurable defaults — never hardcoded in engine source
+// project-specific. Thresholds are configurable defaults — never hardcoded in engine source
 // (owner decision 2, docs/13_Config.md). Secrets are referenced by NAME only, never by value
 // (NFR-6); resolution happens elsewhere (internal/secrets).
 package config
@@ -83,7 +83,7 @@ type Repo struct {
 // Account is one AI worker account (V1 parity). When accounts are listed here they REPLACE folder
 // auto-discovery, so only these known accounts are registered (no stray ~/.cw-accounts junk).
 type Account struct {
-	Name      string `yaml:"name"`       // display name, e.g. "MyOTGO"
+	Name      string `yaml:"name"`       // display name, e.g. "Acme"
 	ConfigDir string `yaml:"config_dir"` // CLAUDE_CONFIG_DIR for this account (~ is expanded)
 	Engine    string `yaml:"engine"`     // "claude" (default). V2 runs Claude only; other engines are skipped.
 	Model     string `yaml:"model"`      // optional model pin

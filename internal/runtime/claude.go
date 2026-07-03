@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
+	"claudworker/internal/assignment"
 )
 
 // ClaudeWorkerRuntime is the FIRST WorkerRuntime provider. It builds the prompt (deterministically, via

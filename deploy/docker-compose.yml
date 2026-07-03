@@ -1,7 +1,7 @@
 services:
   cwv2:
     build: { context: .., dockerfile: deploy/Dockerfile }
-    image: myotgo/cwv2:latest
+    image: example/cwv2:latest
     restart: unless-stopped
     ports: ["8080:8080"]
     volumes: ["cwv2-data:/data"]        # engine home (durable state)

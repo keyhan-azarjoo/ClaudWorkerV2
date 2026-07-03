@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
+	"claudworker/internal/assignment"
 )
 
 func sampleInput() assignment.WorkerInput {

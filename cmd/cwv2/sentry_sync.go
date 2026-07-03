@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/jira"
-	"github.com/myotgo/ClaudWorkerV2/internal/sentry"
+	"claudworker/internal/jira"
+	"claudworker/internal/sentry"
 )
 
 // sentryClients builds a Sentry client per configured org — the project uses two Sentry orgs

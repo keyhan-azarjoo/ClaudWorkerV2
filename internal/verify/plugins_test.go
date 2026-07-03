@@ -78,10 +78,10 @@ func (d *fakeDriver) OCR() (string, error)              { return d.ocr, nil }
 func (d *fakeDriver) State() (map[string]string, error) { return d.state, nil }
 
 func TestVisualVerifierPassJourney(t *testing.T) {
-	d := &fakeDriver{ocr: "Welcome to MyOTGO\nDevice paired", state: map[string]string{"screen": "home"}}
+	d := &fakeDriver{ocr: "Welcome to the app\nDevice paired", state: map[string]string{"screen": "home"}}
 	v := VisualVerifier{VName: "android-visual", VType: TypeVisual, VCaps: []string{"android", "ocr"}, Driver: d}
 	req := Request{
-		Target: "com.myotgo.app",
+		Target: "com.example.app",
 		Steps: []Step{
 			{Action: "navigate", Value: "devices"},
 			{Action: "click", Selector: "add_device"},

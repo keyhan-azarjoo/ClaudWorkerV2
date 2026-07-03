@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/git"
-	"github.com/myotgo/ClaudWorkerV2/internal/jira"
+	"claudworker/internal/git"
+	"claudworker/internal/jira"
 )
 
 // Engine drives one Assignment through its lifecycle. It is 100% deterministic Go (Law 18): it

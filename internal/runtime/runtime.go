@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
+	"claudworker/internal/assignment"
 )
 
 // bytesPerToken is the deterministic divisor for the token ESTIMATE (~4 chars/token, English-ish).

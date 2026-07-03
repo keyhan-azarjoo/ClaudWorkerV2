@@ -16,7 +16,7 @@ project, you write a config file (and, if a new project type is involved, a plug
 ## Project config schema (illustrative)
 
 ```yaml
-project: myotgo
+project: example
 engine_home: /Volumes/Extreme SSD/cwv2-home     # SSD (C-6)
 
 jira:
@@ -37,16 +37,16 @@ github:
 
 repos:
   - name: app
-    url: https://github.com/myotgo/Flutter-IoT-MobileApp
+    url: https://github.com/example/Flutter-IoT-MobileApp
     dev_branch: development
     plugin: flutter
-    path_hints: ["myotgo/"]
+    path_hints: ["example/"]
   - name: backend
-    url: https://github.com/myotgo/DotNet-IoT-MainWebApi
+    url: https://github.com/example/DotNet-IoT-MainWebApi
     dev_branch: development
     plugin: dotnet
   - name: firmware
-    url: https://github.com/myotgo/Arduino-*
+    url: https://github.com/example/Arduino-*
     dev_branch: development
     plugin: esp32-firmware
 
@@ -81,7 +81,7 @@ usage_guard:
   provider: claude-cli
   pause_pct: 95
   resume_pct: 90
-  per_account: { "admin@myotgo.com": 99, default: 80 }   # owner policy
+  per_account: { "admin@example.com": 99, default: 80 }   # owner policy
   fail_open: true
 
 qa:
@@ -133,9 +133,9 @@ they survive restart.
 Resolved secrets are injected into worker/tool subprocess env at spawn time and **never logged**
 (NFR-6).
 
-## MyOTGO as "just a config"
+## Example as "just a config"
 
-The MyOTGO deployment is expressed entirely as one `cwv2.yaml` (the repos, the SCRUM board, the
+The Example deployment is expressed entirely as one `cwv2.yaml` (the repos, the SCRUM board, the
 plugins app/backend/firmware/pcb/cad, the owner's usage policy, real-device preference, hardware
-gates) plus the MyOTGO Brain. No engine code is MyOTGO-aware. Onboarding "project #2" is a second
+gates) plus the Example Brain. No engine code is Example-aware. Onboarding "project #2" is a second
 `cwv2.yaml` — the proof of P10.

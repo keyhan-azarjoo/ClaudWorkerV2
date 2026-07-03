@@ -181,7 +181,7 @@ Same loop; domain-specific Observe (evidence) and Verify (gates). Each is a plug
   gates still PASS the functional part ([10_Hardware](10_Hardware.md)).
 
 ### PCB
-- **Observe:** `kicad-cli` ERC/DRC, netlist extraction, board render, **ngspice** SPICE, `myotgo-pcb`
+- **Observe:** `kicad-cli` ERC/DRC, netlist extraction, board render, **ngspice** SPICE, `example-pcb`
   verify; **measured** creepage.
 - **Analyse:** schematic↔PCB drift vs DRC violation vs creepage/clearance vs SPICE (MOV clamp, X/Y-cap
   bleed, rails, ADC) vs current-rating weakest-link.

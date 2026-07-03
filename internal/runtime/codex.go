@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
+	"claudworker/internal/assignment"
 )
 
 // CodexWorkerRuntime executes the OpenAI Codex CLI (`codex exec`) non-interactively as a worker engine,

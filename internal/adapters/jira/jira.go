@@ -7,8 +7,8 @@ package jiraadapter
 import (
 	"context"
 
-	jira "github.com/myotgo/ClaudWorkerV2/internal/jira"
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
+	jira "claudworker/internal/jira"
+	"claudworker/internal/orchestrator"
 )
 
 // Adapter wraps a *jira.Client. It satisfies orchestrator.Jira.

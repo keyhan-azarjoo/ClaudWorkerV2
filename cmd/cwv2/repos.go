@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
+	"claudworker/internal/config"
 )
 
 // repoEntry is one repository the project may work on. Active=false takes it OUT of agent work; when NO
@@ -114,12 +114,26 @@ func (rs *repoStore) setActive(name string, active bool) []repoEntry {
 	return entries
 }
 
+// deriveOwner extracts the GitHub owner (org/user) from the first configured repo URL, so discovery
+// defaults to the PROJECT's own account rather than any hardcoded name.
+func deriveOwner(repos []config.Repo) string {
+	for _, r := range repos {
+		if i := strings.Index(r.URL, "github.com"); i >= 0 {
+			rest := strings.TrimLeft(r.URL[i+len("github.com"):], ":/")
+			if j := strings.IndexByte(rest, '/'); j > 0 {
+				return rest[:j]
+			}
+		}
+	}
+	return ""
+}
+
 // githubRepos lists every repository owned by `owner` so the Git page can offer them to add. It prefers
 // the `gh` CLI with the token env cleared (so gh uses the broader keychain login, which sees all repos),
 // and falls back to the REST API with GITHUB_TOKEN. Read-only.
 func githubRepos(ctx context.Context, owner string) ([]map[string]any, error) {
 	if owner == "" {
-		owner = "myotgo"
+		return nil, fmt.Errorf("a GitHub owner (org or user) is required")
 	}
 	if out, err := githubReposViaGh(ctx, owner); err == nil && len(out) > 0 {
 		return out, nil
@@ -168,9 +182,6 @@ func githubReposViaREST(ctx context.Context, owner string) ([]map[string]any, er
 	}
 	if tok == "" {
 		return nil, fmt.Errorf("no GITHUB_TOKEN configured")
-	}
-	if owner == "" {
-		owner = "myotgo"
 	}
 	client := &http.Client{Timeout: 20 * time.Second}
 	get := func(path string) ([]map[string]any, int, error) {

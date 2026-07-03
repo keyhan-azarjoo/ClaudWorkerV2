@@ -14,27 +14,27 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/adapters/discovery"
-	gitadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/git"
-	jiraadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/jira"
-	runtimeadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/runtime"
-	"github.com/myotgo/ClaudWorkerV2/internal/adapters/sim"
-	verifyadapter "github.com/myotgo/ClaudWorkerV2/internal/adapters/verify"
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
-	"github.com/myotgo/ClaudWorkerV2/internal/controlplane"
-	"github.com/myotgo/ClaudWorkerV2/internal/enginehome"
-	git "github.com/myotgo/ClaudWorkerV2/internal/git"
-	jira "github.com/myotgo/ClaudWorkerV2/internal/jira"
-	"github.com/myotgo/ClaudWorkerV2/internal/knowledge"
-	"github.com/myotgo/ClaudWorkerV2/internal/lease"
-	"github.com/myotgo/ClaudWorkerV2/internal/logging"
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
-	"github.com/myotgo/ClaudWorkerV2/internal/policy"
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
-	"github.com/myotgo/ClaudWorkerV2/internal/secrets"
-	"github.com/myotgo/ClaudWorkerV2/internal/sentry"
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	"claudworker/internal/adapters/discovery"
+	gitadapter "claudworker/internal/adapters/git"
+	jiraadapter "claudworker/internal/adapters/jira"
+	runtimeadapter "claudworker/internal/adapters/runtime"
+	"claudworker/internal/adapters/sim"
+	verifyadapter "claudworker/internal/adapters/verify"
+	"claudworker/internal/assignment"
+	"claudworker/internal/config"
+	"claudworker/internal/controlplane"
+	"claudworker/internal/enginehome"
+	git "claudworker/internal/git"
+	jira "claudworker/internal/jira"
+	"claudworker/internal/knowledge"
+	"claudworker/internal/lease"
+	"claudworker/internal/logging"
+	"claudworker/internal/orchestrator"
+	"claudworker/internal/policy"
+	"claudworker/internal/resource"
+	"claudworker/internal/secrets"
+	"claudworker/internal/sentry"
+	"claudworker/internal/verify"
 )
 
 // sentrySyncLoop periodically turns new Sentry errors into Jira bugs (enabled by CWV2_SENTRY_SYNC=1).
@@ -178,6 +178,12 @@ func cmdServe(args []string) int {
 		var in createProjectInput
 		if err := json.Unmarshal(body, &in); err != nil {
 			return nil, fmt.Errorf("bad request: %w", err)
+		}
+		if in.CommitName == "" { // inherit the parent project's commit identity by default
+			in.CommitName = cfg.GitHub.CommitIdentity.Name
+		}
+		if in.CommitMail == "" {
+			in.CommitMail = cfg.GitHub.CommitIdentity.Email
 		}
 		return createProject(regPath, in)
 	})
@@ -384,7 +390,11 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 		}
 		cp.Query("repos.list", func(context.Context, url.Values) (any, error) { return rs.load(), nil })
 		cp.Query("github.repos", func(ctx context.Context, q url.Values) (any, error) {
-			return githubRepos(ctx, q.Get("owner"))
+			owner := q.Get("owner")
+			if owner == "" {
+				owner = deriveOwner(cfg.Repos) // default to the project's own GitHub account
+			}
+			return githubRepos(ctx, owner)
 		})
 		cp.Command("repos.add", func(_ context.Context, body []byte) (any, error) {
 			var r struct {
@@ -421,7 +431,7 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 		})
 		// Sentry → Jira: create a HIGH-priority Bug for each new Sentry error (labelled, deduped, capped;
 		// no "ready" label so no agent auto-runs it — the operator Runs it when they want).
-		scs := sentryClients() // one client per configured Sentry org (both myotgo orgs)
+		scs := sentryClients() // one client per configured Sentry org (all configured Sentry orgs)
 		// Read-only preview of recent Sentry errors (no tickets created) — verifies connectivity + lets
 		// the operator see what a sync would turn into bugs.
 		cp.Query("sentry.errors", func(ctx context.Context, _ url.Values) (any, error) {

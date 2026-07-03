@@ -12,7 +12,7 @@ package verifyadapter
 import (
 	"context"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	"claudworker/internal/verify"
 )
 
 // Adapter runs a verification plan (a set of verify.Requests) through a verify.Engine and returns the

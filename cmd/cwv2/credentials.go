@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
-	"github.com/myotgo/ClaudWorkerV2/internal/jira"
-	"github.com/myotgo/ClaudWorkerV2/internal/resource"
+	"claudworker/internal/config"
+	"claudworker/internal/jira"
+	"claudworker/internal/resource"
 )
 
 // credHealth is the owner-facing CREDENTIAL HEALTH view for the Operations Console. It NEVER holds,

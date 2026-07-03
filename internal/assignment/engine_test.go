@@ -12,8 +12,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/git"
-	"github.com/myotgo/ClaudWorkerV2/internal/jira"
+	"claudworker/internal/git"
+	"claudworker/internal/jira"
 )
 
 // fakeWorker returns a scripted sequence of results (one per call); the last repeats after exhaust.

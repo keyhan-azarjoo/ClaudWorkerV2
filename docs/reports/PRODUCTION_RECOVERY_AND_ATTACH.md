@@ -1,17 +1,17 @@
-# Production Recovery + MyOTGO Attach + Idle/Manual-Start
+# Production Recovery + Example Attach + Idle/Manual-Start
 
 Date: 2026-07-02. All five priorities complete and externally validated.
 
 ## 1. Production Recovery Report
 
-**agents.myotgo.com was momentarily offline during a live-runtime redeploy, not a real outage.**
+**agents.example.com was momentarily offline during a live-runtime redeploy, not a real outage.**
 The live runtime runs on the Mac (Claude-local rule) behind a reverse tunnel → Caddy. Each time the
 binary is rebuilt and the launchd job is `kickstart`-ed, there is a ~5 s window where `:8787` is down,
 so the tunnel has nothing to forward and Caddy returns 502. That window is what was observed.
 
-Chain checked (all healthy now): DNS `agents.myotgo.com → 85.215.240.37` ✓ · HTTPS Let's Encrypt cert
+Chain checked (all healthy now): DNS `agents.example.com → 85.215.240.37` ✓ · HTTPS Let's Encrypt cert
 valid ✓ · Caddy container Up ✓ · reverse tunnel `172.18.0.1:9787` LISTENING ✓ · Mac live runtime
-launchd `com.myotgo.cwv2-live` up, `:8787` listening ✓ · auth gate returns 401 without token ✓.
+launchd `com.example.cwv2-live` up, `:8787` listening ✓ · auth gate returns 401 without token ✓.
 Stability: 5/5 external hits `200`, SSE connects, API responds. (The stale `PermissionError` lines in
 the runtime log are from before the `live.env`/TCC fix and are harmless.)
 
@@ -20,25 +20,25 @@ blips it for a few seconds. Rollback to the VPS Simulation container remains one
 
 ## 2. Website URL confirmation
 
-`https://agents.myotgo.com` → **200**, `<title>ClaudWorker V2 — Operations Console</title>`, API +
+`https://agents.example.com` → **200**, `<title>ClaudWorker V2 — Operations Console</title>`, API +
 SSE + auth all working externally.
 
 ## 3. Project Attachment Report
 
-The MyOTGO project is the default, persisted project (config `~/.cw-live/cwv2.yaml`, loaded by launchd
+The Example project is the default, persisted project (config `~/.cw-live/cwv2.yaml`, loaded by launchd
 — no manual reconfiguration per start):
 
 - **Repository:** `backend` = `github.com/keyhan-azarjoo/DotNet-IoT-MainWebApi.git`, branch
   `development`, seeded clone present, `git.status` = clean.
 - **Build command:** `dotnet build` (replaces the default `go build ./...`, which is wrong for a .NET
-  repo — this was the verification mismatch). **API verification:** `https://api.myotgo.com/health`.
+  repo — this was the verification mismatch). **API verification:** `https://api.example.com/health`.
 - **Worktrees:** created per assignment under the engine home (disposable).
-- **Jira:** connected (`myotgo.atlassian.net`, project SCRUM), auth verified, queue live.
+- **Jira:** connected (`example.atlassian.net`, project SCRUM), auth verified, queue live.
 - **Knowledge Brain:** loaded (file store under engine home; currently empty — no entries yet).
 - **Resources / accounts:** 10 Claude accounts discovered from `~/.cw-accounts`, all healthy;
   runtime-selection + cooldown wired.
 
-Note: the pipeline processes one active repo (`repos[0]` = backend). Additional MyOTGO repos
+Note: the pipeline processes one active repo (`repos[0]` = backend). Additional Example repos
 (mobile-app, website) can be made the active project by switching `repos[0]` + build/verify flags;
 multi-repo concurrent processing is not part of the frozen architecture.
 
@@ -63,8 +63,8 @@ Functional proof (external, via the API the button calls):
 
 ## Answers
 
-- **Is https://agents.myotgo.com online?** Yes — 200, verified externally, stable.
-- **Is the MyOTGO project fully attached?** Yes — backend repo on `development`, `dotnet build` +
+- **Is https://agents.example.com online?** Yes — 200, verified externally, stable.
+- **Is the Example project fully attached?** Yes — backend repo on `development`, `dotnet build` +
   API-health verification, Jira connected, 10 accounts healthy, Knowledge Brain loaded, as the default
   persisted project.
 - **Is the platform idle and waiting for your click?** Yes — `state:"idle"`, `active:false`, no work

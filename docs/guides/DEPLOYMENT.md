@@ -13,8 +13,8 @@ Mount `cwv2.yaml` into `/data` and set `--mode live` for production.
 ## macOS (launchd)
 
 ```sh
-sudo cp deploy/launchd/com.myotgo.cwv2.plist /Library/LaunchDaemons/
-sudo launchctl load /Library/LaunchDaemons/com.myotgo.cwv2.plist
+sudo cp deploy/launchd/com.example.cwv2.plist /Library/LaunchDaemons/
+sudo launchctl load /Library/LaunchDaemons/com.example.cwv2.plist
 ```
 `KeepAlive` = automatic recovery on crash; 30s graceful exit.
 

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
-	"github.com/myotgo/ClaudWorkerV2/internal/runtime"
+	"claudworker/internal/assignment"
+	"claudworker/internal/runtime"
 )
 
 func workerUsage() {

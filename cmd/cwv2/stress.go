@@ -4,7 +4,7 @@ import (
 	"flag"
 	"os"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/stress"
+	"claudworker/internal/stress"
 )
 
 // cmdStress runs the deterministic stress harness (Simulation Mode) and prints the report.

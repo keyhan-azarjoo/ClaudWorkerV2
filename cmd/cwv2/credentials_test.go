@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
+	"claudworker/internal/config"
 )
 
 // TestCredHealthNeverExposesValues is the security guard: the credential health view must never

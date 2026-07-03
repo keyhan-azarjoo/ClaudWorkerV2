@@ -92,7 +92,7 @@ All of these are **configurable** so the engine stays portable (P10):
 
 ## Integration with Confluence (optional, project-config)
 
-Some projects (MyOTGO) also expect Confluence updates. This is an **optional deterministic
+Some projects (Example) also expect Confluence updates. This is an **optional deterministic
 publisher** driven by config (which pages, what to post), not a worker responsibility — keeping the
 core project-agnostic (P10). If not configured, it's simply off.
 

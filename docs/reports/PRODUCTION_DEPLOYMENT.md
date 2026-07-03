@@ -1,26 +1,26 @@
-# Production Deployment Report — ClaudWorker V2 replaces V1 at agents.myotgo.com
+# Production Deployment Report — ClaudWorker V2 replaces V1 at agents.example.com
 
-Date: 2026-07-02. Executed live against the production host `85.215.240.37` (shared MyOTGO backend).
-Result: **https://agents.myotgo.com now serves ClaudWorker V2. V1 is retired.** No product service
+Date: 2026-07-02. Executed live against the production host `85.215.240.37` (shared Example backend).
+Result: **https://agents.example.com now serves ClaudWorker V2. V1 is retired.** No product service
 was interrupted.
 
 ## Outcome vs goal
 
 | Goal | Status | Evidence |
 |---|---|---|
-| agents.myotgo.com runs V2 | ✅ | `GET /` → 200, `<title>ClaudWorker V2 — Operations Console</title>`; `/v1/status` → orchestrator running |
+| agents.example.com runs V2 | ✅ | `GET /` → 200, `<title>ClaudWorker V2 — Operations Console</title>`; `/v1/status` → orchestrator running |
 | V1 no longer running | ✅ | 4 V1 launchd jobs booted out + renamed `.disabled`; no V1 process on Mac; `:8787`/`:9787` free |
 | Old console no longer accessible | ✅ | old upstream `172.18.0.1:9787` removed from Caddy; tunnel disabled |
-| URL unchanged | ✅ | same domain, same Let's Encrypt cert (CN=agents.myotgo.com, exp 2026-09-10) |
+| URL unchanged | ✅ | same domain, same Let's Encrypt cert (CN=agents.example.com, exp 2026-09-10) |
 | Users see the new UI | ✅ | V2 SPA + assets (js/css) all 200 over HTTPS |
 | No unrelated production disruption | ✅ | api/mongo/emqx/support-ai/mcp/marketing/coturn/step-ca untouched and Up throughout |
 
 ## What was actually discovered (V1's real architecture)
 
 V1 did **not** run on the production host. It ran on the **local Mac** as launchd job
-`com.myotgo.claudworker` (Go binary `Claud_worker_agent/claudworker -serve`, dashboard on `:8787`),
-exposed to the internet by a **reverse SSH tunnel** (`com.myotgo.agents-tunnel` →
-`85.215.240.37:172.18.0.1:9787`), which Caddy proxied as `agents.myotgo.com → 172.18.0.1:9787`.
+`com.example.claudworker` (Go binary `Claud_worker_agent/claudworker -serve`, dashboard on `:8787`),
+exposed to the internet by a **reverse SSH tunnel** (`com.example.agents-tunnel` →
+`85.215.240.37:172.18.0.1:9787`), which Caddy proxied as `agents.example.com → 172.18.0.1:9787`.
 At deployment time all V1 launchd jobs were already **unloaded** and the tunnel was down — that was
 the live 502.
 
@@ -28,16 +28,16 @@ the live 502.
 
 1. **Recon** (read-only): confirmed the host runs the whole shared product; `:9787` dead; no V1
    systemd/cron on host.
-2. **Build**: rsynced V2 source → `/opt/cwv2-src`; `docker build` → `myotgo/cwv2:latest` (multi-stage,
+2. **Build**: rsynced V2 source → `/opt/cwv2-src`; `docker build` → `example/cwv2:latest` (multi-stage,
    distroless, non-root).
 3. **Config + secret**: generated a 32-byte Control Plane bearer token on the host
    (`/opt/cwv2/secrets/controlplane.token`, `chmod 600`); wrote runtime config to the `/data` volume
    (`/opt/cwv2/data/cwv2.yaml`, owned by the container's non-root uid, `chmod 600`) — Jira uses secret
    **names** (keychain/Azure KV/env), the CP token is a runtime value in the root-only volume, **never
    committed to git**.
-4. **Run**: `cwv2` container on the existing Caddy network `myotgo_myotgo`, `--restart unless-stopped`,
+4. **Run**: `cwv2` container on the existing Caddy network `example_example`, `--restart unless-stopped`,
    `--mode simulation`, Control Plane authenticated.
-5. **Repoint proxy**: backed up `/opt/myotgo/Caddyfile`; changed only the `agents.myotgo.com` upstream
+5. **Repoint proxy**: backed up `/opt/example/Caddyfile`; changed only the `agents.example.com` upstream
    `172.18.0.1:9787 → cwv2:8080`; `caddy validate` = Valid. (Graceful `reload` did not apply — a stale
    persisted admin config held the old upstream — so Caddy was **restarted** to load the file
    deterministically: ~3 s proxy blip, all upstream containers kept running.)
@@ -47,10 +47,10 @@ the live 502.
    rebuilt, recreated the container. Assets now 200.
 8. **Retire V1**: archived V1 plists + `config.json` + tunnel script to
    `~/cwv2-migration-backups/v1-retirement-<ts>/`; `launchctl bootout` + renamed the 4 V1 jobs to
-   `.disabled` (reversible). Left the unrelated `agent-monitor` and all other `com.myotgo.*` jobs
+   `.disabled` (reversible). Left the unrelated `agent-monitor` and all other `com.example.*` jobs
    alone.
 
-## Validation results (over https://agents.myotgo.com)
+## Validation results (over https://agents.example.com)
 
 - Operations Console: `/` 200, title correct, `js/app.js` `css/app.css` `js/api.js` 200.
 - API: `/v1/status` 200 (orchestrator running), `/v1/metrics` 200 (AssignmentCompleted=3…),
@@ -71,7 +71,7 @@ the live 502.
 | usage guard / cooldown / pacing | `usage_guard` (pause 95 / resume 80) in config; Budget/Retry policies; cooldown visible in SSE |
 | scheduling / activation | V2 is a long-running `serve` loop (no external activator needed) |
 | dashboards / monitoring / logs / runtime visibility | Operations Console + `/v1/metrics` + SSE `/v1/events` + `docker logs cwv2` |
-| deployment configuration | `deploy/` (Dockerfile, compose, myotgo/ configs) + this report |
+| deployment configuration | `deploy/` (Dockerfile, compose, example/ configs) + this report |
 
 ## Secrets
 
@@ -94,12 +94,12 @@ the live 502.
 
 ## Rollback (if ever needed)
 
-- Restore Caddy: `cp /opt/myotgo/Caddyfile.bak.pre-cwv2-* /opt/myotgo/Caddyfile` and restart caddy.
+- Restore Caddy: `cp /opt/example/Caddyfile.bak.pre-cwv2-* /opt/example/Caddyfile` and restart caddy.
 - Re-enable V1: rename the `.disabled` plists back and `launchctl bootstrap` them (tunnel + worker).
 - `cwv2` container: `docker rm -f cwv2` removes V2 cleanly.
 
 ## Verdict
 
-Production cutover **complete** for the service: agents.myotgo.com serves ClaudWorker V2, authenticated,
+Production cutover **complete** for the service: agents.example.com serves ClaudWorker V2, authenticated,
 over the existing domain/HTTPS/proxy, with V1 retired and no product disruption. The only work left is
 external credential provisioning to move from Simulation to Live autonomous operation.

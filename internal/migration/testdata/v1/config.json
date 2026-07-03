@@ -1,6 +1,6 @@
 {
   "accounts": [
-    {"label":"MyOTGO","engine":"claude","configDir":"/Users/x/.cw-accounts/myotgo","pausePct":100,"pace":"high","concurrency":2,"fanout":1,"days":"","fromHour":0,"toHour":0,"useSonnet":false,"hardPause":false},
+    {"label":"Example","engine":"claude","configDir":"/Users/x/.cw-accounts/example","pausePct":100,"pace":"high","concurrency":2,"fanout":1,"days":"","fromHour":0,"toHour":0,"useSonnet":false,"hardPause":false},
     {"label":"SPT-Codex","engine":"codex","configDir":"/Users/x/.codex/spt","pausePct":95,"pace":"slow","concurrency":1,"fanout":0,"days":"1-5","fromHour":9,"toHour":19,"useSonnet":false,"hardPause":true}
   ],
   "usagePausePct":98,"usageResumePct":95,"maxConcurrent":10,"inFlightCap":9,"batchSize":5,

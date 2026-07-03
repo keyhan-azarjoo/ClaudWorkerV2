@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/policy"
-	"github.com/myotgo/ClaudWorkerV2/internal/verify"
+	"claudworker/internal/policy"
+	"claudworker/internal/verify"
 )
 
 func steady() func() time.Time {

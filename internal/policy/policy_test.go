@@ -3,8 +3,8 @@ package policy
 import (
 	"testing"
 
-	"github.com/myotgo/ClaudWorkerV2/internal/assignment"
-	"github.com/myotgo/ClaudWorkerV2/internal/config"
+	"claudworker/internal/assignment"
+	"claudworker/internal/config"
 )
 
 // RetryPolicy must satisfy the Assignment Engine's port so the engine can ASK it (S6).

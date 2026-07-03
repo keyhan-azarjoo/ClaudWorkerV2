@@ -14,8 +14,8 @@ import (
 	"os"
 	"path/filepath"
 
-	git "github.com/myotgo/ClaudWorkerV2/internal/git"
-	"github.com/myotgo/ClaudWorkerV2/internal/orchestrator"
+	git "claudworker/internal/git"
+	"claudworker/internal/orchestrator"
 )
 
 // Adapter wraps a *git.Git bound to one engine clone + integration branch + worktree parent dir.
