@@ -41,7 +41,7 @@ Merged to `development`, pushed, and the production container image rebuilt with
 | Subsystem | Result |
 |---|---|
 | Doctor (live config) | **PASS** — git ✓, claude ✓, both Jira secrets resolvable ✓, plugin ✓ |
-| Secrets | Resolved via the **env provider** from existing references (`ATLASSIAN_EMAIL/TOKEN` in the bridge secrets) → `MYOTGO_JIRA_EMAIL/TOKEN`. No secret in git. Azure KV / keychain also supported by the resolver. |
+| Secrets | Resolved via the **env provider** from existing references (`ATLASSIAN_EMAIL/TOKEN` in the bridge secrets) → `EXAMPLE_JIRA_EMAIL/TOKEN`. No secret in git. Azure KV / keychain also supported by the resolver. |
 | Jira auth | `jira health` → account "Keyhan Azarjoo" (keyhanazarjoo@gmail.com) |
 | Jira queue | `jira.queue` live query returns real data; ready-queue currently **empty** (see below) |
 | Jira transitions/comments/labels/automation/attachments | Toolbelt present; all use unchanged `/rest/api/3/issue/...` endpoints (not affected by the removal); covered by unit tests |
@@ -101,7 +101,7 @@ run on a production ticket** was **not** triggered, for two honest reasons:
 
 ## How to switch on (once the owner decides)
 
-- Live runtime (Mac): `MYOTGO_JIRA_EMAIL`/`MYOTGO_JIRA_TOKEN` in env (from the existing bridge
+- Live runtime (Mac): `EXAMPLE_JIRA_EMAIL`/`EXAMPLE_JIRA_TOKEN` in env (from the existing bridge
   secrets), then `cwv2 serve --config <live.yaml> --mode live`. Doctor passes.
 - To serve it at the URL: re-enable the reverse tunnel (Mac cwv2 port → host) and point the Caddy
   `agents.example.com` block at that upstream (reverse of the container repoint; Caddyfile backup

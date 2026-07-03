@@ -7,7 +7,7 @@ Concrete build/verify commands, reconstructed from the actual repositories (not 
 |---|---|---|---|---|
 | **backend (.NET)** — PILOT | `keyhan-azarjoo/DotNet-IoT-MainWebApi` (`WebApi.sln`) | `dotnet build` | `dotnet test` | `--api-url https://api.example.com/health` |
 | mobile-app (Flutter) | `keyhan-azarjoo/Flutter-IoT-MobileApp` (`example/pubspec.yaml`) | `flutter build apk --debug` | `flutter analyze` + `flutter test` | — |
-| website (Next.js) | `keyhan-azarjoo/NextJs-Myotgo-Website` (scripts: build/lint/test) | `npm ci && npm run build` | `npm run lint` + `npm test` | `--web-url https://example.com` |
+| website (Next.js) | `keyhan-azarjoo/NextJs-Example-Website` (scripts: build/lint/test) | `npm ci && npm run build` | `npm run lint` + `npm test` | `--web-url https://example.com` |
 
 ## Pilot launch (backend)
 

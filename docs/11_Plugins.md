@@ -19,7 +19,7 @@ I build/test/QA *this kind* of thing" lives in plugins.
 4. **Gates** — the deterministic PASS/FAIL checks that must run in the Build/QA gate for this type
    (e.g. hardware's DRC/creepage/FCL/18-stage; a Flutter app's build + widget tests + visual diff).
 5. **Prompt hints** — small, type-specific notes appended to the Architecture Summary slice (e.g.
-   "this is a Flutter app; state via Riverpod; icons via MyotgoIcons") — kept tiny (P9).
+   "this is a Flutter app; state via Riverpod; icons via ExampleIcons") — kept tiny (P9).
 
 ## Plugin manifest (declarative)
 

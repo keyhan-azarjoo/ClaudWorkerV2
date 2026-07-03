@@ -29,7 +29,7 @@ accounts:
   - { name: Example, config_dir: ~/.cw-accounts/example }
   - { name: SOT-Claud, config_dir: ~/.cw-accounts/sot-claud }
   # - name: website          # build: npm ci && npm run build ; verify: npm run lint && npm test ; web: https://example.com
-  #   url: https://github.com/keyhan-azarjoo/NextJs-Myotgo-Website.git
+  #   url: https://github.com/keyhan-azarjoo/NextJs-Example-Website.git
   #   dev_branch: development
   #   plugin: generic
 
