@@ -448,6 +448,20 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 			}
 			return map[string]any{"key": r.Key, "status": tr.To.Name}, nil
 		})
+		// jira.delete {key} — PERMANENTLY delete a ticket (operator-confirmed in the UI; irreversible).
+		cp.Command("jira.delete", func(ctx context.Context, body []byte) (any, error) {
+			var r struct {
+				Key string `json:"key"`
+			}
+			_ = json.Unmarshal(body, &r)
+			if strings.TrimSpace(r.Key) == "" {
+				return nil, fmt.Errorf("issue key required")
+			}
+			if err := jiraClient.DeleteIssue(ctx, r.Key); err != nil {
+				return nil, err
+			}
+			return map[string]any{"key": r.Key, "deleted": true}, nil
+		})
 		// Per-ticket conversation: explain (ticket text only) or investigate (+ save to Jira). Async.
 		var chatRepo string
 		if len(cfg.Repos) > 0 && l.ProjectDir != "" {
@@ -472,9 +486,9 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 			}
 			return map[string]any{"key": r.Key, "queued": true}, nil
 		})
-		// jira.backlog: ALL project tasks, highest priority first (the console shows the real board).
-		cp.Query("jira.backlog", func(ctx context.Context, _ url.Values) (any, error) {
-			return jiraBacklog(ctx, jiraClient, projectKey)
+		// jira.backlog: actionable tasks by priority; ?all=1 includes every status (for bulk clean-up).
+		cp.Query("jira.backlog", func(ctx context.Context, q url.Values) (any, error) {
+			return jiraBacklog(ctx, jiraClient, projectKey, q.Get("all") == "1", q.Get("q"))
 		})
 		// Sentry → Jira: create a HIGH-priority Bug for each new Sentry error (labelled, deduped, capped;
 		// no "ready" label so no agent auto-runs it — the operator Runs it when they want).

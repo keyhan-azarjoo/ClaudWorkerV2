@@ -196,10 +196,15 @@ export default {
 
     // Backlog + task status + accounts. statusFilter persists across reloads (empty = show all).
     const statusFilter = new Set();
+    let showDone = false; // when true, include Done/Cancelled tickets (for clean-up/deletion)
+    let search = ""; // summary search (for finding a batch to clean up)
     async function loadBacklog() {
       try {
+        const params = {};
+        if (showDone) params.all = "1";
+        if (search) params.q = search;
         const [rows, tasks, resources] = await Promise.all([
-          api.query("jira.backlog").catch(() => []),
+          api.query("jira.backlog", Object.keys(params).length ? params : undefined).catch(() => []),
           api.query("tasks.activity").catch(() => []),
           api.query("resources.snapshot").catch(() => []),
         ]);
@@ -290,9 +295,82 @@ export default {
             )
         );
 
+        // --- Bulk clean-up: select rows, then Cancel (reversible) or Delete (permanent) many at once ---
+        const selected = new Set();
+        let filtered = rows;
+        const bulkBar = el("div", { class: "bulk-bar" });
+        async function bulkRun(kind) {
+          const keys = [...selected];
+          if (!keys.length) return;
+          const label = kind === "delete" ? "PERMANENTLY DELETE" : kind === "run" ? "Run" : "Cancel";
+          const extra = kind === "delete" ? "\n\nThis CANNOT be undone." : kind === "run" ? "\n\nEach will edit the repo, verify, and merge if it passes." : " (reversible — sets status to Cancelled)";
+          if (!confirm(`${label} ${keys.length} ticket(s)?${extra}\n\n${keys.slice(0, 12).join(", ")}${keys.length > 12 ? " …" : ""}`)) return;
+          let ok = 0,
+            fail = 0;
+          const verb = kind === "delete" ? "Deleting" : kind === "run" ? "Starting" : "Cancelling";
+          for (const key of keys) {
+            try {
+              if (kind === "delete") await api.command("jira.delete", { key });
+              else if (kind === "run") await api.command("orchestrator.run", { issue: key, account: "" });
+              else await api.command("jira.transition", { key, to: "Cancel" });
+              ok++;
+              selected.delete(key);
+              bulkBar.replaceChildren(el("span", { class: "sub" }, `${verb}… ${ok}/${keys.length}${fail ? ` (${fail} failed)` : ""}`));
+            } catch (e) {
+              fail++;
+            }
+          }
+          selected.clear();
+          setTimeout(loadBacklog, 600);
+        }
+        function updateBulk() {
+          if (!selected.size) {
+            bulkBar.replaceChildren();
+            return;
+          }
+          const runB = button("▶ Run selected", { tone: "primary" });
+          runB.onclick = () => bulkRun("run");
+          const cancelB = button("Cancel selected", {});
+          cancelB.onclick = () => bulkRun("cancel");
+          const delB = button("🗑 Delete selected", { tone: "danger" });
+          delB.onclick = () => bulkRun("delete");
+          const clearB = button("Clear", {});
+          clearB.onclick = () => {
+            selected.clear();
+            renderList();
+          };
+          bulkBar.replaceChildren(el("span", { class: "bulk-count" }, `${selected.size} selected`), runB, cancelB, delB, clearB);
+        }
+
+        // Toolbar: Refresh + search + Show-done + Select-all-shown + the bulk-action bar.
+        const refreshBtn = button("↻ Refresh", {});
+        refreshBtn.onclick = () => loadBacklog();
+        const searchInput = el("input", { class: "acct-select jira-search", type: "search", placeholder: "search summary… (e.g. Device, deploy)", value: search });
+        searchInput.onkeydown = (e) => {
+          if (e.key === "Enter") {
+            search = searchInput.value.trim();
+            selected.clear();
+            loadBacklog();
+          }
+        };
+        const selectAllBtn = button("Select all shown", {});
+        selectAllBtn.onclick = () => {
+          const allSel = filtered.length > 0 && filtered.every((r) => selected.has(r.key));
+          filtered.forEach((r) => (allSel ? selected.delete(r.key) : selected.add(r.key)));
+          selectAllBtn.textContent = allSel ? "Select all shown" : "Unselect all";
+          renderList();
+        };
+        const doneBtn = button(showDone ? "✓ Showing done" : "Show done", { tone: showDone ? "primary" : "" });
+        doneBtn.onclick = () => {
+          showDone = !showDone;
+          selected.clear();
+          statusFilter.clear();
+          loadBacklog();
+        };
+        const toolbar = el("div", { class: "jira-toolbar" }, refreshBtn, searchInput, doneBtn, selectAllBtn, bulkBar);
+
         function renderList() {
-          const filtered = statusFilter.size ? rows.filter((r) => statusFilter.has(r.status)) : rows;
-          // rebuild only the chips' active state + the table (cheap; no refetch)
+          filtered = statusFilter.size ? rows.filter((r) => statusFilter.has(r.status)) : rows;
           filterBar.querySelectorAll(".status-chip").forEach((c, i) => {
             if (i === 0) c.classList.toggle("active", statusFilter.size === 0);
             else {
@@ -300,10 +378,21 @@ export default {
               c.classList.toggle("active", statusFilter.has(s));
             }
           });
+          const selectCell = (r) => {
+            const cb = el("input", { type: "checkbox" });
+            cb.checked = selected.has(r.key);
+            cb.onclick = (e) => {
+              e.stopPropagation();
+              cb.checked ? selected.add(r.key) : selected.delete(r.key);
+              updateBulk();
+            };
+            return cb;
+          };
           tableWrap.replaceChildren(
             filtered.length
               ? table(
                   [
+                    { key: "sel", label: "", render: selectCell },
                     { key: "key", label: "Key", mono: true, render: (r) => openCell(r.key, r) },
                     { key: "summary", label: "Summary", render: (r) => openCell(r.summary, r) },
                     { key: "status", label: "Status", render: (r) => badge(r.status) },
@@ -314,10 +403,11 @@ export default {
                 )
               : emptyState("Nothing matches", "No tasks with the selected status.")
           );
+          updateBulk();
         }
 
         const tableWrap = el("div");
-        backlogBody.replaceChildren(rows.length ? el("div", {}, filterBar, tableWrap) : emptyState("Backlog empty", "No open issues on the board."));
+        backlogBody.replaceChildren(rows.length ? el("div", {}, toolbar, filterBar, tableWrap) : emptyState("Backlog empty", "No open issues on the board."));
         if (rows.length) renderList();
       } catch (e) {
         backlogBody.replaceChildren(el("div", { class: "notice danger" }, "Failed to load backlog: " + (e && e.message ? e.message : e)));
