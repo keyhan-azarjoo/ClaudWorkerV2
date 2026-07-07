@@ -247,12 +247,12 @@ func jiraBacklog(ctx context.Context, cli *jira.Client, projectKey string, inclu
 	// Build the JQL from valid clauses. Default: actionable tasks only (not Done/cancelled). includeAll
 	// shows EVERY status (for bulk clean-up). Marketing is ALWAYS excluded (owner rule — agents don't
 	// touch marketing, so it never appears on the board).
-	limit := 100
+	// Paginate up to 500 so the board shows the REAL count (there can be hundreds of actionable tickets),
+	// not a misleading first-100. The status filter + search narrow it down.
+	limit := 500
 	jql := fmt.Sprintf("project = %s", projectKey)
 	if !includeAll {
 		jql += " AND statusCategory != Done AND status not in (Cancel, Cancelled, Canceled)"
-	} else {
-		limit = 500
 	}
 	if s := strings.TrimSpace(search); s != "" {
 		jql += fmt.Sprintf(" AND summary ~ %q", s)
