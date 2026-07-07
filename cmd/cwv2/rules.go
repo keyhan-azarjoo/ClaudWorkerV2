@@ -47,6 +47,18 @@ func defaultRules() []ruleEntry {
 			Text:   "Do not mark a task done until you have verified the change actually works on each affected platform/surface (build it, and where a device/simulator is available, exercise it). Never claim a platform is updated without checking it.",
 			Active: true,
 		},
+		{
+			ID:     "no-deploy-tickets",
+			Title:  "Never create tickets for deploying / deploy-to-staging",
+			Text:   "Deploying (to staging or anywhere) is NOT a ticketed task — never create, split out, or leave open a Jira ticket/sub-task for 'deploy to staging', 'deploy', 'promote', or similar. Just do the deploy as part of the work. If a deployment FAILS, surface the error on the deploy page / in the logs (and stop), do not file a ticket for it.",
+			Active: true,
+		},
+		{
+			ID:     "no-marketing-tickets",
+			Title:  "Never create or touch marketing tickets",
+			Text:   "Do NOT create, modify, comment on, transition, or work on any MARKETING ticket. Marketing is out of scope for the engineering agents and is hidden from the board. If a task looks like marketing (summary mentions marketing, or it carries the 'marketing' label), leave it alone entirely.",
+			Active: true,
+		},
 	}
 }
 

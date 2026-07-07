@@ -193,6 +193,35 @@ func (c *Client) Search(ctx context.Context, jql string, fields []string, maxRes
 	return res, err
 }
 
+// SearchAll follows NextPageToken pages (the endpoint caps at 100 per page) up to `limit` issues, so
+// callers can see the whole board — e.g. for bulk clean-up of hundreds of old tickets.
+func (c *Client) SearchAll(ctx context.Context, jql string, fields []string, limit int) ([]Issue, error) {
+	if len(fields) == 0 {
+		fields = []string{"summary", "status", "priority", "labels"}
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	var all []Issue
+	token := ""
+	for len(all) < limit {
+		req := searchJQLRequest{JQL: jql, MaxResults: 100, Fields: fields, NextPageToken: token}
+		var res SearchResult
+		if err := c.do(ctx, "search", http.MethodPost, "/rest/api/3/search/jql", req, &res); err != nil {
+			return all, err
+		}
+		all = append(all, res.Issues...)
+		if res.IsLast || res.NextPageToken == "" || len(res.Issues) == 0 {
+			break
+		}
+		token = res.NextPageToken
+	}
+	if len(all) > limit {
+		all = all[:limit]
+	}
+	return all, nil
+}
+
 // CreateIssueInput describes a new issue to create.
 type CreateIssueInput struct {
 	ProjectKey  string
@@ -238,6 +267,12 @@ func (c *Client) GetIssue(ctx context.Context, key string) (Issue, error) {
 	var iss Issue
 	err := c.do(ctx, "get_issue", http.MethodGet, "/rest/api/3/issue/"+url.PathEscape(key), nil, &iss)
 	return iss, err
+}
+
+// DeleteIssue permanently deletes an issue (and its subtasks). IRREVERSIBLE — the caller is responsible
+// for confirmation. (DELETE /issue/{key}?deleteSubtasks=true)
+func (c *Client) DeleteIssue(ctx context.Context, key string) error {
+	return c.do(ctx, "delete_issue", http.MethodDelete, "/rest/api/3/issue/"+url.PathEscape(key)+"?deleteSubtasks=true", nil, nil)
 }
 
 // ---- Transitions ----

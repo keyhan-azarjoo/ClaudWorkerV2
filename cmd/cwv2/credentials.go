@@ -237,22 +237,34 @@ func projectKeyFromJQL(jql string) string {
 
 // jiraBacklog returns the open board for the project (not just ready-to-work), so the console shows
 // the real tasks. Read-only; no secret in the result.
-func jiraBacklog(ctx context.Context, cli *jira.Client, projectKey string) (any, error) {
+func jiraBacklog(ctx context.Context, cli *jira.Client, projectKey string, includeAll bool, search string) (any, error) {
 	if cli == nil {
 		return []any{}, nil
 	}
 	if projectKey == "" {
 		projectKey = "SCRUM"
 	}
-	// All ACTIONABLE tasks (everything not Done/cancelled), HIGHEST priority first. Done tickets are
-	// excluded — they aren't runnable and only clutter the board.
-	jql := fmt.Sprintf(`project = %s AND statusCategory != Done AND status not in (Cancel, Cancelled, Canceled) ORDER BY priority DESC, updated DESC`, projectKey)
-	res, err := cli.Search(ctx, jql, []string{"summary", "status", "priority", "labels"}, 100)
+	// Build the JQL from valid clauses. Default: actionable tasks only (not Done/cancelled). includeAll
+	// shows EVERY status (for bulk clean-up). Marketing is ALWAYS excluded (owner rule — agents don't
+	// touch marketing, so it never appears on the board).
+	limit := 100
+	jql := fmt.Sprintf("project = %s", projectKey)
+	if !includeAll {
+		jql += " AND statusCategory != Done AND status not in (Cancel, Cancelled, Canceled)"
+	} else {
+		limit = 500
+	}
+	if s := strings.TrimSpace(search); s != "" {
+		jql += fmt.Sprintf(" AND summary ~ %q", s)
+		limit = 500
+	}
+	jql += ` AND (labels != marketing OR labels is EMPTY) AND summary !~ "marketing" ORDER BY priority DESC, updated DESC`
+	issues, err := cli.SearchAll(ctx, jql, []string{"summary", "status", "priority", "labels"}, limit)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]map[string]any, 0, len(res.Issues))
-	for _, iss := range res.Issues {
+	out := make([]map[string]any, 0, len(issues))
+	for _, iss := range issues {
 		prio := ""
 		if iss.Fields.Priority != nil {
 			prio = iss.Fields.Priority.Name
