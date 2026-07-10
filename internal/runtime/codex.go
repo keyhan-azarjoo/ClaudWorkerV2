@@ -52,6 +52,7 @@ func (w CodexWorkerRuntime) Run(ctx context.Context, in assignment.WorkerInput) 
 	}
 	summary := "codex completed"
 	total := 0
+	var nonEmpty []string
 	sc := bufio.NewScanner(stdoutPipe)
 	sc.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	for sc.Scan() {
@@ -59,6 +60,7 @@ func (w CodexWorkerRuntime) Run(ctx context.Context, in assignment.WorkerInput) 
 		total += len(line) + 1
 		if s := strings.TrimSpace(line); s != "" {
 			summary = s // keep the last non-empty line as a short summary
+			nonEmpty = append(nonEmpty, s)
 			if w.OnLine != nil {
 				w.OnLine(s)
 			}
@@ -68,6 +70,17 @@ func (w CodexWorkerRuntime) Run(ctx context.Context, in assignment.WorkerInput) 
 	if err := cmd.Wait(); err != nil {
 		return resp, fmt.Errorf("codex runtime: exec %s: %w (stderr: %s)", bin, err, strings.TrimSpace(stderr.String()))
 	}
-	resp.Result = assignment.WorkerResult{OK: true, Summary: summary}
+	// Honor the agent's OWN result: if it printed the {"ok":...} WorkerResult contract, use that OK/summary
+	// (so an ok:false "I couldn't complete this" is NOT reported as success). A clean run with no such line
+	// defaults to success (codex edits the worktree directly; the Git side commits the changes).
+	resp.Result = assignment.WorkerResult{OK: true, Summary: clip(summary, 400)}
+	for i := len(nonEmpty) - 1; i >= 0; i-- {
+		if strings.Contains(nonEmpty[i], "\"ok\"") {
+			if res, ok := parseResult(nonEmpty[i]); ok {
+				resp.Result = res
+				break
+			}
+		}
+	}
 	return resp, nil
 }

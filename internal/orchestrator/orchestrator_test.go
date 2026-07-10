@@ -63,14 +63,16 @@ func (f *fakeJira) Comment(context.Context, string, string) error {
 
 type fakeDeveloper struct {
 	calls int
+	notOK bool // when true, the worker reports ok=false (a semantic "could not complete") with no error
 	mu    sync.Mutex
 }
 
 func (f *fakeDeveloper) Develop(context.Context, DevInput) (DevResult, error) {
 	f.mu.Lock()
 	f.calls++
+	notOK := f.notOK
 	f.mu.Unlock()
-	return DevResult{OK: true, Summary: "did work", ChangedFiles: []string{"main.go"}}, nil
+	return DevResult{OK: !notOK, Summary: "did work", ChangedFiles: []string{"main.go"}}, nil
 }
 
 type fakeVerifier struct {
@@ -171,6 +173,28 @@ func TestAutonomousClaimToCompletion(t *testing.T) {
 		if !types[want] {
 			t.Errorf("missing event %q (have %v)", want, keys(types))
 		}
+	}
+}
+
+// TestSemanticFailureDoesNotMerge guards the SCRUM-1000 bug: when the worker reports ok=false ("could
+// not complete") but the build still passes, the task must NOT be merged/marked done — it must fail.
+func TestSemanticFailureDoesNotMerge(t *testing.T) {
+	h := newHarness(t, []Issue{{Key: "SCRUM-X", Summary: "do a thing"}}, [][]verify.Result{pass()}, true)
+	h.dev.notOK = true // worker declines (ok=false), but verification (build) passes
+	if _, err := h.o.ProcessOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	a, _, _ := h.store.Load("SCRUM-X")
+	if a.State == assignment.StateDone {
+		t.Fatalf("ok=false task must NOT be Done; got %s", a.State)
+	}
+	if a.State != assignment.StateFailed {
+		t.Errorf("state = %s, want failed", a.State)
+	}
+	// It must not have merged.
+	types := eventTypes(h.cp)
+	if types["MergeCompleted"] {
+		t.Error("an ok=false task must not merge")
 	}
 }
 

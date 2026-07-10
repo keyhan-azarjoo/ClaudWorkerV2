@@ -737,9 +737,9 @@ func pick(cond bool, a, b string) string {
 
 // buildImprovement wires S8 (verify) + S9 (improve) + S6 (policy) into the improvement loop for one
 // issue, reusing each subsystem — the Orchestrator adds no loop logic of its own.
-func (o *Orchestrator) buildImprovement(iss Issue, kctx, runtimeName, account, operatorNote string) *improvement.Engine {
+func (o *Orchestrator) buildImprovement(iss Issue, kctx, runtimeName, account, operatorNote string, lastOK *bool) *improvement.Engine {
 	verifier := &impVerifier{o: o, issue: iss.Key}
-	improver := &impImprover{o: o, iss: iss, kctx: kctx, runtime: runtimeName, account: account, operatorNote: operatorNote}
+	improver := &impImprover{o: o, iss: iss, kctx: kctx, runtime: runtimeName, account: account, operatorNote: operatorNote, lastOK: lastOK}
 	dec := improvement.NewPolicyDecider(o.Policy)
 	eng := improvement.New(verifier, improver, dec, improvement.WithClock(o.now))
 	eng.MaxIterations = o.Cfg.MaxImprovementIters
