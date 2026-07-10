@@ -30,19 +30,14 @@ function taskBox(t, agentCount) {
   // How many agents worked on this task — live lsof count while running, else the recorded historical count.
   const agents = Math.max(agentCount || 0, t.agents || 0);
 
-  // A failed task gets a Continue button right on the box (retry on a fresh account after an error).
+  // A failed task gets a Continue button on the box — it opens the drawer so you can pick the account
+  // (e.g. switch off a usage-limited one) and add a message before resuming.
   let continueBtn = null;
   if (t.state === "failed") {
     continueBtn = el("button", { class: "btn primary task-continue" }, "▶ Continue");
-    continueBtn.onclick = async (e) => {
-      e.stopPropagation(); // don't open the drawer
-      continueBtn.textContent = "…";
-      continueBtn.disabled = true;
-      try {
-        await api.command("orchestrator.continue", { issue: t.issue });
-      } catch (err) {
-        /* shown in drawer if opened */
-      }
+    continueBtn.onclick = (e) => {
+      e.stopPropagation();
+      openTaskDrawer(t.issue);
     };
   }
 
@@ -132,16 +127,32 @@ function openTaskDrawer(issue) {
   // Optional message to the agent, sent with Continue (e.g. "the merge conflicted, rebase onto origin
   // and retry" or extra guidance).
   const msgInput = el("input", { class: "drawer-msg", type: "text", placeholder: "Optional message to the agent (sent on Continue)…" });
-  // Continue: retry/resume the task after a transient error (rate limit / API / merge error). Sends the
-  // task — plus your message — to a fresh, non-cooled account.
+  // Account picker for Continue — pick which account to resume on (e.g. switch off a usage-limited one).
+  const acctSel = el("select", { class: "acct-select", title: "Continue on this account" }, el("option", { value: "" }, "Auto (any available)"));
+  api
+    .query("resources.snapshot")
+    .then((res) => {
+      (res || [])
+        .filter((r) => r.kind === "claude_account" && r.availability !== "paused" && r.availability !== "offline")
+        .forEach((a) => {
+          const eng = (a.labels && a.labels.engine) || "claude";
+          const opt = el("option", { value: a.id }, `${a.name} (${eng})` + (a.availability !== "available" ? " — " + a.availability : ""));
+          acctSel.append(opt);
+        });
+    })
+    .catch(() => {});
+  // Continue: retry/resume the task after a transient error (usage/rate limit, API, merge). Runs it again
+  // on the selected account (or auto), with your optional message.
   const continueBtn = el("button", { class: "btn primary" }, "▶ Continue");
   continueBtn.onclick = async () => {
     const message = msgInput.value.trim();
+    const account = acctSel.value;
     continueBtn.textContent = "Continuing…";
     continueBtn.disabled = true;
     try {
-      await api.command("orchestrator.continue", { issue, message });
-      logEl.append(el("div", { class: "drawer-line", style: "color:var(--ok,#3fb950)" }, "▶ continue sent" + (message ? " with your message" : "") + " — the agent is resuming on an available account…"));
+      await api.command("orchestrator.continue", { issue, message, account });
+      const who = account ? acctSel.options[acctSel.selectedIndex].text : "an available account";
+      logEl.append(el("div", { class: "drawer-line", style: "color:var(--ok,#3fb950)" }, "▶ continue sent" + (message ? " with your message" : "") + " — resuming on " + who + "…"));
       msgInput.value = "";
     } catch (e) {
       logEl.append(el("div", { class: "drawer-line", style: "color:var(--danger,#f85149)" }, "Continue failed: " + (e && e.message ? e.message : e)));
@@ -162,7 +173,7 @@ function openTaskDrawer(issue) {
       { class: "drawer" },
       el("div", { class: "drawer-head" }, el("span", { class: "drawer-title mono" }, issue + " — live agent report"), tokEl, copyBtn, mdBtn, closeBtn),
       logEl,
-      el("div", { class: "drawer-foot" }, msgInput, continueBtn)
+      el("div", { class: "drawer-foot" }, msgInput, acctSel, continueBtn)
     )
   );
   let stopped = false;

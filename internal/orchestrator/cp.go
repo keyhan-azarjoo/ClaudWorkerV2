@@ -177,14 +177,12 @@ func (o *Orchestrator) RegisterControlPlane() {
 		if running {
 			return nil, fmt.Errorf("%s is already running", req.Issue)
 		}
-		if a, exists, _ := o.Store.Load(req.Issue); exists {
-			if a.State == assignment.StateDone {
-				return nil, fmt.Errorf("%s is already done", req.Issue)
-			}
-			if a.State.Terminal() { // failed → reset to non-terminal so it can run again
-				a.State = assignment.StateClaimed
-				_ = o.Store.Save(a)
-			}
+		if a, exists, _ := o.Store.Load(req.Issue); exists && a.State.Terminal() {
+			// Continue is an EXPLICIT operator request to run AGAIN — reset ANY terminal state (done or
+			// failed) so it re-runs. Common case: the run stopped on a usage/rate limit, or merged empty,
+			// and the operator wants to continue it (often on a different account).
+			a.State = assignment.StateClaimed
+			_ = o.Store.Save(a)
 		}
 		if req.Message != "" {
 			o.AppendTaskLog(req.Issue, "🧑 operator: "+req.Message)
