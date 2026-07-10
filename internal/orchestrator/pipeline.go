@@ -76,12 +76,21 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 	// --- Verification + Improvement loop (S8 + S9), stop decided by the Policy Engine (S6) ---
 	a.State = assignment.StateQA
 	_ = o.Store.Save(a)
-	imp := o.buildImprovement(iss, kctx, runtimeName, resID, operatorNote)
+	// Track the worker's own completion signal across the initial develop + every improvement iteration.
+	// A passing BUILD is not enough: if the agent itself reports ok=false ("I could not complete this"),
+	// the task is NOT done — we must not merge it as success (that was marking incomplete work "done").
+	lastOK := err == nil && dev.OK
+	imp := o.buildImprovement(iss, kctx, runtimeName, resID, operatorNote, &lastOK)
 	res, _ := imp.Run(ctx, improvement.ImprovementInput{Assignment: iss.Key, KnowledgeContext: kctx})
 	o.emit(controlplane.EventPolicyDecision, "policy", map[string]any{"policy": "improvement", "decision": string(res.Status), "reason": "improvement loop terminal", "iterations": res.Progress.Iterations})
 
 	switch res.Status {
 	case improvement.StatusPassed:
+		if !lastOK {
+			// Worker reported the task incomplete — fail (don't merge), so the operator sees it and can Continue.
+			_ = o.Jira.Comment(ctx, iss.Key, "ClaudWorker: the worker reported it could NOT complete this task (ok=false) — not merged.")
+			return o.fail(ctx, a, iss, "worker reported task not complete (ok=false): "+firstLine(dev.Summary))
+		}
 		return o.mergeAndClose(ctx, a, iss)
 	case improvement.StatusDeferred:
 		return o.deferAssignment(ctx, a, iss, "policy deferred")
@@ -248,12 +257,16 @@ type impImprover struct {
 	runtime      string
 	account      string
 	operatorNote string
+	lastOK       *bool // updated with each iteration's worker completion signal (nil-safe)
 }
 
 func (im *impImprover) Improve(ctx context.Context, in improvement.ImprovementInput) (improvement.Change, error) {
 	dev, err := im.o.Developer.Develop(ctx, DevInput{Issue: im.iss.Key, Summary: im.iss.Summary, AcceptanceCriteria: im.iss.AcceptanceCriteria, KnowledgeContext: im.kctx, Runtime: im.runtime, Account: im.account, OperatorNote: im.operatorNote, Rules: im.o.activeRules()})
 	if err != nil {
 		return improvement.Change{}, err
+	}
+	if im.lastOK != nil {
+		*im.lastOK = dev.OK
 	}
 	return improvement.Change{Category: improvement.CatDefect, Reason: dev.Summary, ChangedFiles: dev.ChangedFiles}, nil
 }
