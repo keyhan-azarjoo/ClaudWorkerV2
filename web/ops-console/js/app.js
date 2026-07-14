@@ -46,6 +46,13 @@ const NAV = [
     ],
   },
   {
+    group: "AI Workspace",
+    items: [
+      { path: "/aiw/dashboard", label: "Dashboard", ico: "dashboard" },
+      { path: "/aiw/providers", label: "Providers", ico: "resources" },
+    ],
+  },
+  {
     group: "System",
     items: [
       { path: "/metrics", label: "Metrics", ico: "metrics" },
@@ -73,6 +80,8 @@ const MODULES = {
   "/credentials": () => import("./modules/credentials.js"),
   "/rules": () => import("./modules/rules.js"),
   "/knowledge": () => import("./modules/knowledge.js"),
+  "/aiw/dashboard": () => import("./modules/aiw/dashboard.js"),
+  "/aiw/providers": () => import("./modules/aiw/providers.js"),
   "/metrics": () => import("./modules/metrics.js"),
   "/logs": () => import("./modules/logs.js"),
   "/settings": () => import("./modules/settings.js"),

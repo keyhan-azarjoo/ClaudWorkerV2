@@ -1,0 +1,81 @@
+/* aiw.css — AI Workspace styles. Dark-first, animated cards; reuses the console's CSS variables so it
+   inherits the active theme. Scoped under .aiw-* to avoid collisions with the rest of the console. */
+
+/* ---- Dashboard ---- */
+.aiw-dash { display: flex; flex-direction: column; gap: 16px; }
+
+.aiw-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.aiw-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.aiw-tile:hover { transform: translateY(-2px); border-color: var(--border-strong); box-shadow: var(--shadow); }
+.aiw-tile.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+.aiw-tile.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+.aiw-tile.danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.aiw-tile-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.aiw-tile-value { font-size: 20px; font-weight: 650; margin-top: 4px; }
+.aiw-tile-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.aiw-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+@media (max-width: 820px) { .aiw-cols { grid-template-columns: 1fr; } }
+
+.aiw-usage { display: flex; flex-direction: column; gap: 12px; }
+.aiw-usage-nums { display: flex; gap: 24px; flex-wrap: wrap; }
+.aiw-metric { display: flex; flex-direction: column; }
+.aiw-metric .n { font-size: 22px; font-weight: 700; }
+.aiw-metric .l { font-size: 12px; color: var(--muted); }
+.aiw-metric.accent .n { color: var(--accent); }
+.aiw-usage-foot { font-size: 12px; color: var(--muted); }
+
+.aiw-ratios { display: flex; gap: 20px; justify-content: space-around; align-items: center; }
+.aiw-cta { font-size: 13px; color: var(--muted); padding: 8px 2px; }
+.aiw-cta a { color: var(--accent); }
+
+/* ---- Charts ---- */
+.aiw-spark { width: 100%; height: 52px; display: block; overflow: visible; }
+.aiw-spark-line { stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.aiw-spark-area { fill: color-mix(in srgb, var(--accent) 16%, transparent); }
+.aiw-donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.aiw-donut-track { stroke: var(--border); stroke-width: 8; }
+.aiw-donut-arc { stroke: var(--accent); stroke-width: 8; stroke-linecap: round; transition: stroke-dasharray .5s ease; }
+.aiw-donut-text { fill: var(--text); font-size: 18px; font-weight: 700; font-family: var(--sans); }
+.aiw-donut-label { font-size: 12px; color: var(--muted); }
+
+/* ---- Providers ---- */
+.aiw-prov-list { display: flex; flex-direction: column; gap: 14px; }
+.aiw-prov-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.aiw-prov-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+.aiw-prov-card.off { opacity: .6; }
+.aiw-prov-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.aiw-prov-name { font-weight: 650; font-size: 15px; }
+.aiw-prov-url { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+.aiw-accts { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.aiw-accts-empty { font-size: 12px; color: var(--muted); margin: 10px 0; }
+.aiw-acct {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 10px; font-size: 13px;
+}
+.aiw-acct-label { font-weight: 550; }
+.aiw-acct-key { color: var(--muted); }
+.aiw-acct-model { font-size: 12px; color: var(--accent); }
+
+.aiw-prov-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.aiw-test-msg { font-size: 12px; color: var(--muted); }
+.aiw-test-msg.ok { color: var(--ok); }
+.aiw-test-msg.bad { color: var(--danger); }

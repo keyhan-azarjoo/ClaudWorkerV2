@@ -384,6 +384,11 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 		})
 	}
 
+	// AI Workspace (Providers + Dashboard + Usage): local-first AI provider management. Keys live in the
+	// OS keychain (never in JSON), the default provider is local/free, and connection tests never make a
+	// paid inference call — only free model-list checks.
+	registerAIWorkspace(cp, l.ProjectDir)
+
 	// Repositories (Git page): the project's managed repos with active/inactive state + org discovery.
 	// Deactivating EVERY repo turns the project OFF — the work gate then refuses all agent work.
 	if live && l.ProjectDir != "" {
