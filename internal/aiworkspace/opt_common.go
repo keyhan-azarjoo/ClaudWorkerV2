@@ -2,8 +2,24 @@ package aiworkspace
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+// ansiRe matches ANSI/VT100 escape sequences (colors, cursor moves) found in logs/terminal output.
+var ansiRe = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]")
+
+// stripANSI removes ANSI escape sequences.
+func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
+
+// lastAfterCR keeps only the text after the final carriage return on a line (collapses progress-bar
+// spam that overwrites itself with \r).
+func lastAfterCR(s string) string {
+	if i := strings.LastIndexByte(s, '\r'); i >= 0 {
+		return s[i+1:]
+	}
+	return s
+}
 
 // result builds an OptimizeOutput and measures token savings via the heuristic counter.
 func result(before []byte, after string, notes ...string) OptimizeOutput {
