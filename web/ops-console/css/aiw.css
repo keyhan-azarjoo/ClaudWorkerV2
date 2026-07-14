@@ -144,3 +144,24 @@
 .aiw-plugin { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
 .aiw-plugin-name { font-weight: 600; min-width: 160px; }
 .aiw-plugin-desc { color: var(--muted); flex: 1; min-width: 200px; }
+
+/* ---- Scan ---- */
+.notice.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); color: var(--text); }
+.aiw-scan-controls { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.aiw-scan-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.aiw-scan-types { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.aiw-scan-bar { display: flex; gap: 8px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
+.aiw-scan-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.aiw-scan-file {
+  display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius-sm);
+  font-size: 13px; border: 1px solid transparent;
+}
+.aiw-scan-file:hover { background: var(--surface); border-color: var(--border); }
+.aiw-scan-file.dim { opacity: .5; }
+.aiw-scan-cb { display: inline-flex; }
+.aiw-scan-path { flex: 1; min-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aiw-scan-tok { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.aiw-scan-saved { color: var(--accent); min-width: 52px; text-align: right; }
+.aiw-scan-actions { display: inline-flex; gap: 6px; }
+.aiw-scan-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+@media (max-width: 720px) { .aiw-scan-diff { grid-template-columns: 1fr; } }
