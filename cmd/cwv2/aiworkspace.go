@@ -322,4 +322,49 @@ func registerAIWorkspace(cp *controlplane.Server, projectDir string) {
 		svc.CompanionDisconnect()
 		return map[string]any{"ok": true}, nil
 	})
+
+	// --- Scan (real on-disk files) ---
+	cp.Command("aiw.scan.run", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Roots      []string `json:"roots"`
+			Types      []string `json:"types"`
+			Workspaces bool     `json:"workspaces"`
+		}
+		_ = json.Unmarshal(body, &r)
+		if r.Workspaces {
+			return svc.ScanWorkspaces(r.Types), nil
+		}
+		return svc.Scan(r.Roots, r.Types), nil
+	})
+	cp.Command("aiw.scan.optimize", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Paths []string `json:"paths"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return map[string]any{"results": svc.ScanOptimize(r.Paths)}, nil
+	})
+	cp.Command("aiw.scan.preview", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Path string `json:"path"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return svc.ScanPreview(r.Path)
+	})
+	cp.Command("aiw.scan.restore", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Path string `json:"path"`
+			All  bool   `json:"all"`
+		}
+		_ = json.Unmarshal(body, &r)
+		if r.All {
+			return map[string]any{"restored": svc.ScanRestoreAll()}, nil
+		}
+		if err := svc.ScanRestore(r.Path); err != nil {
+			return nil, err
+		}
+		return map[string]any{"ok": true}, nil
+	})
+	cp.Query("aiw.scan.backups", func(context.Context, url.Values) (any, error) {
+		return svc.ScanBackups(), nil
+	})
 }

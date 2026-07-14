@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,7 @@ type Service struct {
 	context    *contextStore
 	knowledge  *knowledgeStore
 	companion  *companion
+	scanner    *scanner
 }
 
 // New constructs the service rooted at <projectDir>/aiworkspace (created if missing).
@@ -36,6 +38,7 @@ func New(projectDir string) *Service {
 		context:    newContextStore(d),
 		knowledge:  newKnowledgeStore(d),
 		companion:  newCompanion(d),
+		scanner:    newScanner(d),
 	}
 }
 
@@ -267,6 +270,40 @@ func (s *Service) CompanionConnect(url string) (map[string]any, error) {
 	return s.companion.connect(url)
 }
 func (s *Service) CompanionDisconnect() { s.companion.disconnect() }
+
+// --- Scan (real on-disk files) -----------------------------------------------------------------------
+
+func (s *Service) Scan(roots, types []string) ScanResult { return s.scanner.scan(roots, types) }
+
+// ScanWorkspaces scans every folder attached to every workspace ("same thing on all projects").
+func (s *Service) ScanWorkspaces(types []string) ScanResult {
+	return s.scanner.scan(s.workspaceScanRoots(), types)
+}
+func (s *Service) ScanOptimize(paths []string) []map[string]any {
+	return s.scanner.optimizeFiles(paths)
+}
+func (s *Service) ScanRestore(path string) error { return s.scanner.restore(path) }
+func (s *Service) ScanRestoreAll() int           { return s.scanner.restoreAll() }
+func (s *Service) ScanBackups() []backupEntry    { return s.scanner.backups() }
+func (s *Service) ScanPreview(path string) (map[string]any, error) {
+	return s.scanner.preview(path)
+}
+
+// workspaceScanRoots gathers every workspace's folders (deduped), so Scan can batch across all projects.
+func (s *Service) workspaceScanRoots() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, w := range s.workspaces.load() {
+		for _, f := range w.Folders {
+			f = strings.TrimSpace(f)
+			if f != "" && !seen[f] {
+				seen[f] = true
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
 
 // optimizerConfig returns the stored config for an id (nil if unset → defaults apply).
 func (s *Service) optimizerConfig(id string) map[string]any {
