@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 
@@ -49,6 +50,29 @@ func registerAIWorkspace(cp *controlplane.Server, projectDir string) {
 	cp.Query("aiw.usage.series", func(_ context.Context, q url.Values) (any, error) {
 		days, _ := strconv.Atoi(q.Get("range"))
 		return svc.UsageSeries(days), nil
+	})
+	cp.Query("aiw.workspaces.list", func(context.Context, url.Values) (any, error) {
+		return svc.WorkspacesList(), nil
+	})
+	cp.Query("aiw.context.list", func(context.Context, url.Values) (any, error) {
+		return svc.ContextList(), nil
+	})
+	cp.Query("aiw.context.get", func(_ context.Context, q url.Values) (any, error) {
+		pack, content, ok := svc.ContextGet(q.Get("id"))
+		if !ok {
+			return nil, fmt.Errorf("unknown context pack")
+		}
+		return map[string]any{"pack": pack, "content": content}, nil
+	})
+	cp.Query("aiw.knowledge.list", func(_ context.Context, q url.Values) (any, error) {
+		return map[string]any{"items": svc.KnowledgeList(q.Get("q")), "collections": svc.KnowledgeCollections()}, nil
+	})
+	cp.Query("aiw.knowledge.get", func(_ context.Context, q url.Values) (any, error) {
+		item, content, ok := svc.KnowledgeGet(q.Get("id"))
+		if !ok {
+			return nil, fmt.Errorf("unknown knowledge item")
+		}
+		return map[string]any{"item": item, "content": content}, nil
 	})
 
 	// --- Commands (providers) ---
@@ -186,6 +210,100 @@ func registerAIWorkspace(cp *controlplane.Server, projectDir string) {
 		}
 		_ = json.Unmarshal(body, &r)
 		svc.CacheExpire(r.Key)
+		return map[string]any{"ok": true}, nil
+	})
+
+	// --- Commands (workspaces) ---
+	cp.Command("aiw.workspace.add", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(body, &r)
+		w, err := svc.AddWorkspace(r.Name)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"id": w.ID, "workspaces": svc.WorkspacesList()}, nil
+	})
+	cp.Command("aiw.workspace.update", func(_ context.Context, body []byte) (any, error) {
+		var w aiworkspace.Workspace
+		_ = json.Unmarshal(body, &w)
+		return svc.UpdateWorkspace(w)
+	})
+	cp.Command("aiw.workspace.remove", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return svc.RemoveWorkspace(r.ID), nil
+	})
+	cp.Command("aiw.workspace.setCurrent", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return svc.SetCurrentWorkspace(r.ID), nil
+	})
+
+	// --- Commands (context packs) ---
+	cp.Command("aiw.context.build", func(ctx context.Context, body []byte) (any, error) {
+		var r struct {
+			ID         string   `json:"id"`
+			Name       string   `json:"name"`
+			Sources    []string `json:"sources"`
+			Inline     string   `json:"inline"`
+			Optimizers []string `json:"optimizers"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return svc.ContextBuild(ctx, r.ID, r.Name, r.Sources, r.Inline, r.Optimizers)
+	})
+	cp.Command("aiw.context.pin", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			ID     string `json:"id"`
+			Pinned bool   `json:"pinned"`
+		}
+		_ = json.Unmarshal(body, &r)
+		svc.ContextPin(r.ID, r.Pinned)
+		return map[string]any{"ok": true}, nil
+	})
+	cp.Command("aiw.context.remove", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(body, &r)
+		svc.ContextRemove(r.ID)
+		return map[string]any{"ok": true}, nil
+	})
+
+	// --- Commands (knowledge) ---
+	cp.Command("aiw.knowledge.add", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Title, Kind, Collection, Content string
+			Tags                             []string
+		}
+		_ = json.Unmarshal(body, &r)
+		item, err := svc.KnowledgeAdd(r.Title, r.Kind, r.Collection, r.Tags, r.Content)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"id": item.ID}, nil
+	})
+	cp.Command("aiw.knowledge.update", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			ID, Title, Kind, Collection, Content string
+			Tags                                 []string
+			ContentSet                           bool `json:"contentSet"`
+		}
+		_ = json.Unmarshal(body, &r)
+		_, err := svc.KnowledgeUpdate(r.ID, r.Title, r.Kind, r.Collection, r.Tags, r.Content, r.ContentSet)
+		return map[string]any{"ok": err == nil}, err
+	})
+	cp.Command("aiw.knowledge.remove", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(body, &r)
+		svc.KnowledgeRemove(r.ID)
 		return map[string]any{"ok": true}, nil
 	})
 }

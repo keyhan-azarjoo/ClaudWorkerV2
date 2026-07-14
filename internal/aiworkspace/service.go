@@ -16,13 +16,25 @@ type Service struct {
 	usage      *usageStore
 	optimizers *optimizerStore
 	cache      *cacheStore
+	workspaces *workspaceStore
+	context    *contextStore
+	knowledge  *knowledgeStore
 }
 
 // New constructs the service rooted at <projectDir>/aiworkspace (created if missing).
 func New(projectDir string) *Service {
 	d := filepath.Join(projectDir, "aiworkspace")
 	_ = os.MkdirAll(d, 0o755)
-	return &Service{dir: d, providers: newProviderStore(d), usage: newUsageStore(d), optimizers: newOptimizerStore(d), cache: newCacheStore(d)}
+	return &Service{
+		dir:        d,
+		providers:  newProviderStore(d),
+		usage:      newUsageStore(d),
+		optimizers: newOptimizerStore(d),
+		cache:      newCacheStore(d),
+		workspaces: newWorkspaceStore(d),
+		context:    newContextStore(d),
+		knowledge:  newKnowledgeStore(d),
+	}
 }
 
 // --- Providers ---------------------------------------------------------------------------------------
@@ -203,6 +215,37 @@ func (s *Service) CacheExpire(key string)           { s.cache.Expire(key) }
 
 func (s *Service) UsageSeries(rangeDays int) UsageSeries { return s.usage.series(rangeDays) }
 
+// --- Workspaces --------------------------------------------------------------------------------------
+
+func (s *Service) WorkspacesList() []Workspace                      { return s.workspaces.load() }
+func (s *Service) AddWorkspace(name string) (Workspace, error)      { return s.workspaces.add(name) }
+func (s *Service) UpdateWorkspace(w Workspace) ([]Workspace, error) { return s.workspaces.update(w) }
+func (s *Service) RemoveWorkspace(id string) []Workspace            { return s.workspaces.remove(id) }
+func (s *Service) SetCurrentWorkspace(id string) []Workspace        { return s.workspaces.setCurrent(id) }
+
+// --- Context packs -----------------------------------------------------------------------------------
+
+func (s *Service) ContextList() []ContextPack { return s.context.list() }
+func (s *Service) ContextBuild(ctx context.Context, id, name string, sources []string, inline string, optimizerIDs []string) (ContextPack, error) {
+	return s.context.build(ctx, id, name, sources, inline, optimizerIDs)
+}
+func (s *Service) ContextGet(id string) (ContextPack, string, bool) { return s.context.get(id) }
+func (s *Service) ContextPin(id string, pinned bool)                { s.context.pin(id, pinned) }
+func (s *Service) ContextRemove(id string)                          { s.context.remove(id) }
+
+// --- Knowledge ---------------------------------------------------------------------------------------
+
+func (s *Service) KnowledgeList(query string) []KnowledgeItem { return s.knowledge.list(query) }
+func (s *Service) KnowledgeCollections() []string             { return s.knowledge.collections() }
+func (s *Service) KnowledgeAdd(title, kind, collection string, tags []string, content string) (KnowledgeItem, error) {
+	return s.knowledge.add(title, kind, collection, tags, content)
+}
+func (s *Service) KnowledgeUpdate(id, title, kind, collection string, tags []string, content string, contentSet bool) (KnowledgeItem, error) {
+	return s.knowledge.update(id, title, kind, collection, tags, content, contentSet)
+}
+func (s *Service) KnowledgeGet(id string) (KnowledgeItem, string, bool) { return s.knowledge.get(id) }
+func (s *Service) KnowledgeRemove(id string)                            { s.knowledge.remove(id) }
+
 // optimizerConfig returns the stored config for an id (nil if unset → defaults apply).
 func (s *Service) optimizerConfig(id string) map[string]any {
 	if st, ok := s.optimizers.state(id); ok {
@@ -265,11 +308,16 @@ func (s *Service) Dashboard() map[string]any {
 		}
 	}
 
+	workspace := "—"
+	if w, ok := s.workspaces.current(); ok {
+		workspace = w.Name
+	}
+
 	return map[string]any{
 		"provider":         providerName,
 		"providerLocal":    local,
 		"model":            model,
-		"workspace":        "—", // Workspaces arrive in a later phase
+		"workspace":        workspace,
 		"proxy":            map[string]any{"running": false},
 		"companion":        map[string]any{"present": false},
 		"health":           health,

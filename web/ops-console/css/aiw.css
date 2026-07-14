@@ -132,3 +132,6 @@
 /* ---- Cache ---- */
 .aiw-cache-stats { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
 .aiw-donut-hold { flex: 0 0 auto; }
+
+/* ---- Workspaces / Context / Knowledge ---- */
+.aiw-opt-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 4px 12px; margin: 6px 0; }
