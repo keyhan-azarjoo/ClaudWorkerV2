@@ -119,3 +119,16 @@
   background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 10px; max-height: 300px; overflow: auto; font-family: var(--mono); font-size: 12px; white-space: pre-wrap;
 }
+
+/* ---- Usage / hbars ---- */
+.aiw-hbars { display: flex; flex-direction: column; gap: 8px; }
+.aiw-hbars-empty { font-size: 13px; color: var(--muted); }
+.aiw-hbar { display: grid; grid-template-columns: 120px 1fr 64px; align-items: center; gap: 10px; font-size: 12.5px; }
+.aiw-hbar-label { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aiw-hbar-track { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; height: 10px; overflow: hidden; }
+.aiw-hbar-fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width .4s ease; }
+.aiw-hbar-val { text-align: right; color: var(--muted); font-family: var(--mono); }
+
+/* ---- Cache ---- */
+.aiw-cache-stats { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.aiw-donut-hold { flex: 0 0 auto; }

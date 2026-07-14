@@ -2,6 +2,7 @@ package aiworkspace
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,13 +15,14 @@ type Service struct {
 	providers  *providerStore
 	usage      *usageStore
 	optimizers *optimizerStore
+	cache      *cacheStore
 }
 
 // New constructs the service rooted at <projectDir>/aiworkspace (created if missing).
 func New(projectDir string) *Service {
 	d := filepath.Join(projectDir, "aiworkspace")
 	_ = os.MkdirAll(d, 0o755)
-	return &Service{dir: d, providers: newProviderStore(d), usage: newUsageStore(d), optimizers: newOptimizerStore(d)}
+	return &Service{dir: d, providers: newProviderStore(d), usage: newUsageStore(d), optimizers: newOptimizerStore(d), cache: newCacheStore(d)}
 }
 
 // --- Providers ---------------------------------------------------------------------------------------
@@ -139,6 +141,20 @@ func (s *Service) RunOptimizer(ctx context.Context, id, kind, content string, ov
 			cfg[k] = v
 		}
 	}
+
+	// Cache lookup: identical (optimizer + config + content) → return the cached output, no recompute.
+	cfgJSON, _ := json.Marshal(cfg)
+	key := HashKey("optimizer", id, string(cfgJSON), content)
+	if _, val, hit := s.cache.Get(key); hit {
+		after := EstimateTokens(string(val))
+		before := EstimateTokens(content)
+		return map[string]any{
+			"output": string(val), "tokensBefore": before, "tokensAfter": after,
+			"saved": maxInt(before-after, 0), "notes": []string{"served from cache"},
+			"latencyMs": 0.0, "cached": true,
+		}, nil
+	}
+
 	start := time.Now()
 	res, err := o.Optimize(ctx, OptimizeInput{Kind: kind, Content: []byte(content), Config: cfg})
 	lat := float64(time.Since(start).Microseconds()) / 1000.0
@@ -151,6 +167,7 @@ func (s *Service) RunOptimizer(ctx context.Context, id, kind, content string, ov
 		saved = 0
 	}
 	s.usage.record(UsageEvent{Optimizer: id, SavedTok: saved})
+	s.cache.Put("optimizer", key, o.Meta().Name+" · "+kind, res.Content, res.TokensAfter)
 	return map[string]any{
 		"output":       string(res.Content),
 		"tokensBefore": res.TokensBefore,
@@ -158,8 +175,33 @@ func (s *Service) RunOptimizer(ctx context.Context, id, kind, content string, ov
 		"saved":        saved,
 		"notes":        res.Notes,
 		"latencyMs":    lat,
+		"cached":       false,
 	}, nil
 }
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// --- Cache -------------------------------------------------------------------------------------------
+
+func (s *Service) CacheStats() map[string]any { return s.cache.Stats() }
+func (s *Service) CacheList(limit int) []CacheEntry {
+	if limit <= 0 {
+		limit = 100
+	}
+	return s.cache.List(limit)
+}
+func (s *Service) CacheClear(kind string) int       { return s.cache.Clear(kind) }
+func (s *Service) CachePin(key string, pinned bool) { s.cache.Pin(key, pinned) }
+func (s *Service) CacheExpire(key string)           { s.cache.Expire(key) }
+
+// --- Usage series ------------------------------------------------------------------------------------
+
+func (s *Service) UsageSeries(rangeDays int) UsageSeries { return s.usage.series(rangeDays) }
 
 // optimizerConfig returns the stored config for an id (nil if unset → defaults apply).
 func (s *Service) optimizerConfig(id string) map[string]any {
@@ -237,7 +279,7 @@ func (s *Service) Dashboard() map[string]any {
 		"optimizersActive": optEnabled,
 		"optimizerSaved":   optSaved,
 		"compressionRatio": compression,
-		"cacheHitRatio":    0, // Cache phase
+		"cacheHitRatio":    s.cache.hitRatio(),
 		"generatedAt":      time.Now().UTC().Format(time.RFC3339),
 	}
 }

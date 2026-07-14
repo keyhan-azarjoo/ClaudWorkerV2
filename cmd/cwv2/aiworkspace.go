@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"strconv"
 
 	"claudworker/internal/aiworkspace"
 	"claudworker/internal/controlplane"
@@ -34,6 +35,20 @@ func registerAIWorkspace(cp *controlplane.Server, projectDir string) {
 	})
 	cp.Query("aiw.optimizers.list", func(context.Context, url.Values) (any, error) {
 		return svc.OptimizersList(), nil
+	})
+	cp.Query("aiw.cache.stats", func(context.Context, url.Values) (any, error) {
+		return svc.CacheStats(), nil
+	})
+	cp.Query("aiw.cache.list", func(_ context.Context, q url.Values) (any, error) {
+		limit := 100
+		if n, err := strconv.Atoi(q.Get("limit")); err == nil && n > 0 {
+			limit = n
+		}
+		return svc.CacheList(limit), nil
+	})
+	cp.Query("aiw.usage.series", func(_ context.Context, q url.Values) (any, error) {
+		days, _ := strconv.Atoi(q.Get("range"))
+		return svc.UsageSeries(days), nil
 	})
 
 	// --- Commands (providers) ---
@@ -146,5 +161,31 @@ func registerAIWorkspace(cp *controlplane.Server, projectDir string) {
 		}
 		_ = json.Unmarshal(body, &r)
 		return svc.RunOptimizer(ctx, r.ID, r.Kind, r.Content, r.Config)
+	})
+
+	// --- Commands (cache) ---
+	cp.Command("aiw.cache.clear", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Kind string `json:"kind"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return map[string]any{"removed": svc.CacheClear(r.Kind), "stats": svc.CacheStats()}, nil
+	})
+	cp.Command("aiw.cache.pin", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Key    string `json:"key"`
+			Pinned bool   `json:"pinned"`
+		}
+		_ = json.Unmarshal(body, &r)
+		svc.CachePin(r.Key, r.Pinned)
+		return map[string]any{"ok": true}, nil
+	})
+	cp.Command("aiw.cache.expire", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Key string `json:"key"`
+		}
+		_ = json.Unmarshal(body, &r)
+		svc.CacheExpire(r.Key)
+		return map[string]any{"ok": true}, nil
 	})
 }

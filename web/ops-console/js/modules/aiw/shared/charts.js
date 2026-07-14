@@ -59,3 +59,44 @@ export function fmtTokens(n) {
   if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
   return String(n);
 }
+
+// fmtBytes — compact human byte sizes.
+export function fmtBytes(n) {
+  n = Number(n) || 0;
+  if (n >= 1 << 20) return (n / (1 << 20)).toFixed(1) + " MB";
+  if (n >= 1 << 10) return (n / (1 << 10)).toFixed(1) + " KB";
+  return n + " B";
+}
+
+// hbars(rows) — a labelled horizontal bar list. rows = [{label, value, fmt?}]. Pure DOM (no SVG).
+export function hbars(rows, { emptyText = "No data yet" } = {}) {
+  const wrap = document.createElement("div");
+  wrap.className = "aiw-hbars";
+  if (!rows || !rows.length) {
+    const e = document.createElement("div");
+    e.className = "aiw-hbars-empty";
+    e.textContent = emptyText;
+    wrap.append(e);
+    return wrap;
+  }
+  const max = Math.max(1, ...rows.map((r) => r.value || 0));
+  for (const r of rows) {
+    const row = document.createElement("div");
+    row.className = "aiw-hbar";
+    const label = document.createElement("span");
+    label.className = "aiw-hbar-label";
+    label.textContent = r.label;
+    const track = document.createElement("span");
+    track.className = "aiw-hbar-track";
+    const fill = document.createElement("span");
+    fill.className = "aiw-hbar-fill";
+    fill.style.width = Math.round(((r.value || 0) / max) * 100) + "%";
+    track.append(fill);
+    const val = document.createElement("span");
+    val.className = "aiw-hbar-val";
+    val.textContent = r.fmt ? r.fmt(r.value) : fmtTokens(r.value);
+    row.append(label, track, val);
+    wrap.append(row);
+  }
+  return wrap;
+}

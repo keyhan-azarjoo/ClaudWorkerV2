@@ -51,6 +51,8 @@ const NAV = [
       { path: "/aiw/dashboard", label: "Dashboard", ico: "dashboard" },
       { path: "/aiw/providers", label: "Providers", ico: "resources" },
       { path: "/aiw/optimizers", label: "Optimizers", ico: "improvement" },
+      { path: "/aiw/usage", label: "Usage", ico: "metrics" },
+      { path: "/aiw/cache", label: "Cache", ico: "leases" },
     ],
   },
   {
@@ -84,6 +86,8 @@ const MODULES = {
   "/aiw/dashboard": () => import("./modules/aiw/dashboard.js"),
   "/aiw/providers": () => import("./modules/aiw/providers.js"),
   "/aiw/optimizers": () => import("./modules/aiw/optimizers.js"),
+  "/aiw/usage": () => import("./modules/aiw/usage.js"),
+  "/aiw/cache": () => import("./modules/aiw/cache.js"),
   "/metrics": () => import("./modules/metrics.js"),
   "/logs": () => import("./modules/logs.js"),
   "/settings": () => import("./modules/settings.js"),

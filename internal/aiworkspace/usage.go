@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -46,6 +47,24 @@ type DayPoint struct {
 	Date   string `json:"date"` // YYYY-MM-DD
 	Tokens int    `json:"tokens"`
 	Saved  int    `json:"saved"`
+}
+
+// NameVal is a labelled total for breakdown charts.
+type NameVal struct {
+	Name  string `json:"name"`
+	Value int    `json:"value"`
+}
+
+// UsageSeries powers the Usage analytics page: daily totals plus breakdowns. Provider/model breakdowns
+// stay empty until the optimizing proxy (a later phase) records inference events — honest, not faked.
+type UsageSeries struct {
+	RangeDays   int        `json:"rangeDays"`
+	Days        []DayPoint `json:"days"`
+	ByOptimizer []NameVal  `json:"byOptimizer"`
+	ByProvider  []NameVal  `json:"byProvider"`
+	TotalTokens int        `json:"totalTokens"`
+	TotalSaved  int        `json:"totalSaved"`
+	Events      int        `json:"events"`
 }
 
 // usageStore appends events to per-month JSONL files under aiworkspace/usage/. Small and dependency-free;
@@ -152,4 +171,100 @@ func (u *usageStore) summary() UsageSummary {
 		s.Days = append(s.Days, *buckets[d])
 	}
 	return s
+}
+
+// series builds the Usage analytics view over the last rangeDays: daily totals + per-optimizer and
+// per-provider breakdowns.
+func (u *usageStore) series(rangeDays int) UsageSeries {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if rangeDays <= 0 {
+		rangeDays = 30
+	}
+	if rangeDays > 365 {
+		rangeDays = 365
+	}
+	now := u.now().UTC()
+
+	buckets := map[string]*DayPoint{}
+	order := make([]string, 0, rangeDays)
+	months := map[string]bool{}
+	for i := rangeDays - 1; i >= 0; i-- {
+		day := now.AddDate(0, 0, -i)
+		d := day.Format("2006-01-02")
+		order = append(order, d)
+		buckets[d] = &DayPoint{Date: d}
+		months[u.monthPath(day)] = true
+	}
+	cutoff := order[0] // earliest day in range (YYYY-MM-DD compares lexically)
+
+	byOpt := map[string]int{}
+	byProv := map[string]int{}
+	var s UsageSeries
+	s.RangeDays = rangeDays
+
+	for mp := range months {
+		f, err := os.Open(mp)
+		if err != nil {
+			continue
+		}
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
+		for sc.Scan() {
+			line := sc.Bytes()
+			if len(line) == 0 {
+				continue
+			}
+			var e UsageEvent
+			if json.Unmarshal(line, &e) != nil {
+				continue
+			}
+			day := ""
+			if len(e.TS) >= 10 {
+				day = e.TS[:10]
+			}
+			if day < cutoff {
+				continue
+			}
+			tok := e.InputTok + e.OutputTok
+			s.Events++
+			s.TotalTokens += tok
+			s.TotalSaved += e.SavedTok
+			if bp, ok := buckets[day]; ok {
+				bp.Tokens += tok
+				bp.Saved += e.SavedTok
+			}
+			if e.Optimizer != "" {
+				byOpt[e.Optimizer] += e.SavedTok
+			}
+			if e.Provider != "" {
+				byProv[e.Provider] += tok
+			}
+		}
+		f.Close()
+	}
+	for _, d := range order {
+		s.Days = append(s.Days, *buckets[d])
+	}
+	s.ByOptimizer = topNameVals(byOpt, 12)
+	s.ByProvider = topNameVals(byProv, 12)
+	return s
+}
+
+// topNameVals turns a name→value map into a slice sorted by value desc, capped at n.
+func topNameVals(m map[string]int, n int) []NameVal {
+	out := make([]NameVal, 0, len(m))
+	for k, v := range m {
+		out = append(out, NameVal{Name: k, Value: v})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Value != out[j].Value {
+			return out[i].Value > out[j].Value
+		}
+		return out[i].Name < out[j].Name
+	})
+	if n > 0 && len(out) > n {
+		out = out[:n]
+	}
+	return out
 }
