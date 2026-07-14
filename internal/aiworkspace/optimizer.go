@@ -37,6 +37,9 @@ type OptimizerMeta struct {
 	Version      string            `json:"version"`
 	Kinds        []string          `json:"kinds"` // content kinds it accepts (informational)
 	ConfigSchema []FieldSpec       `json:"configSchema"`
+	// RequiresCompanion marks optimizers whose work (embeddings, vector search) runs in the local
+	// companion daemon, not the core. The service routes these to the companion and the UI badges them.
+	RequiresCompanion bool `json:"requiresCompanion,omitempty"`
 }
 
 // OptimizeInput is the content + config handed to an optimizer.

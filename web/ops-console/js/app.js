@@ -56,6 +56,8 @@ const NAV = [
       { path: "/aiw/knowledge", label: "Knowledge", ico: "knowledge" },
       { path: "/aiw/usage", label: "Usage", ico: "metrics" },
       { path: "/aiw/cache", label: "Cache", ico: "leases" },
+      { path: "/aiw/plugins", label: "Plugins", ico: "runtimes" },
+      { path: "/aiw/settings", label: "Settings", ico: "settings" },
     ],
   },
   {
@@ -94,6 +96,8 @@ const MODULES = {
   "/aiw/knowledge": () => import("./modules/aiw/knowledge.js"),
   "/aiw/usage": () => import("./modules/aiw/usage.js"),
   "/aiw/cache": () => import("./modules/aiw/cache.js"),
+  "/aiw/plugins": () => import("./modules/aiw/plugins.js"),
+  "/aiw/settings": () => import("./modules/aiw/settings.js"),
   "/metrics": () => import("./modules/metrics.js"),
   "/logs": () => import("./modules/logs.js"),
   "/settings": () => import("./modules/settings.js"),

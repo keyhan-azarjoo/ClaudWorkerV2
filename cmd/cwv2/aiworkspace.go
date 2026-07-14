@@ -74,6 +74,9 @@ func registerAIWorkspace(cp *controlplane.Server, projectDir string) {
 		}
 		return map[string]any{"item": item, "content": content}, nil
 	})
+	cp.Query("aiw.companion.status", func(context.Context, url.Values) (any, error) {
+		return svc.CompanionStatus(), nil
+	})
 
 	// --- Commands (providers) ---
 	cp.Command("aiw.provider.add", func(_ context.Context, body []byte) (any, error) {
@@ -304,6 +307,19 @@ func registerAIWorkspace(cp *controlplane.Server, projectDir string) {
 		}
 		_ = json.Unmarshal(body, &r)
 		svc.KnowledgeRemove(r.ID)
+		return map[string]any{"ok": true}, nil
+	})
+
+	// --- Commands (companion) ---
+	cp.Command("aiw.companion.connect", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			URL string `json:"url"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return svc.CompanionConnect(r.URL)
+	})
+	cp.Command("aiw.companion.disconnect", func(_ context.Context, _ []byte) (any, error) {
+		svc.CompanionDisconnect()
 		return map[string]any{"ok": true}, nil
 	})
 }

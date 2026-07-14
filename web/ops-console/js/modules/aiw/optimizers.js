@@ -141,6 +141,7 @@ function optCard(o, reload) {
       el("label", { class: "aiw-switch-wrap", title: "Enable/disable" }, enToggle),
       el("span", { class: "aiw-opt-name" }, o.meta.name),
       badge(o.meta.category, ""),
+      o.meta.requiresCompanion ? badge("needs companion", "warn") : null,
       st.runs ? badge(st.health || "ok", healthTone) : null
     ),
     el("div", { class: "aiw-opt-desc" }, o.meta.description),

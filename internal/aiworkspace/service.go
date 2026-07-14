@@ -19,6 +19,7 @@ type Service struct {
 	workspaces *workspaceStore
 	context    *contextStore
 	knowledge  *knowledgeStore
+	companion  *companion
 }
 
 // New constructs the service rooted at <projectDir>/aiworkspace (created if missing).
@@ -34,6 +35,7 @@ func New(projectDir string) *Service {
 		workspaces: newWorkspaceStore(d),
 		context:    newContextStore(d),
 		knowledge:  newKnowledgeStore(d),
+		companion:  newCompanion(d),
 	}
 }
 
@@ -168,7 +170,19 @@ func (s *Service) RunOptimizer(ctx context.Context, id, kind, content string, ov
 	}
 
 	start := time.Now()
-	res, err := o.Optimize(ctx, OptimizeInput{Kind: kind, Content: []byte(content), Config: cfg})
+	var res OptimizeOutput
+	var err error
+	if o.Meta().RequiresCompanion {
+		// Off-core optimizer: route execution to the local companion daemon.
+		out, notes, cerr := s.companion.optimize(ctx, id, content, cfg)
+		if cerr != nil {
+			err = cerr
+		} else {
+			res = OptimizeOutput{Content: []byte(out), TokensBefore: EstimateTokens(content), TokensAfter: EstimateTokens(out), Notes: notes}
+		}
+	} else {
+		res, err = o.Optimize(ctx, OptimizeInput{Kind: kind, Content: []byte(content), Config: cfg})
+	}
 	lat := float64(time.Since(start).Microseconds()) / 1000.0
 	s.optimizers.recordRun(id, res.TokensBefore, res.TokensAfter, lat, err)
 	if err != nil {
@@ -246,6 +260,14 @@ func (s *Service) KnowledgeUpdate(id, title, kind, collection string, tags []str
 func (s *Service) KnowledgeGet(id string) (KnowledgeItem, string, bool) { return s.knowledge.get(id) }
 func (s *Service) KnowledgeRemove(id string)                            { s.knowledge.remove(id) }
 
+// --- Companion ---------------------------------------------------------------------------------------
+
+func (s *Service) CompanionStatus() map[string]any { return s.companion.status() }
+func (s *Service) CompanionConnect(url string) (map[string]any, error) {
+	return s.companion.connect(url)
+}
+func (s *Service) CompanionDisconnect() { s.companion.disconnect() }
+
 // optimizerConfig returns the stored config for an id (nil if unset → defaults apply).
 func (s *Service) optimizerConfig(id string) map[string]any {
 	if st, ok := s.optimizers.state(id); ok {
@@ -319,7 +341,7 @@ func (s *Service) Dashboard() map[string]any {
 		"model":            model,
 		"workspace":        workspace,
 		"proxy":            map[string]any{"running": false},
-		"companion":        map[string]any{"present": false},
+		"companion":        s.companion.status(),
 		"health":           health,
 		"providersCount":   len(ps),
 		"enabledCount":     enabled,
