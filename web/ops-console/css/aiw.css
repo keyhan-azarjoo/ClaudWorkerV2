@@ -79,3 +79,43 @@
 .aiw-test-msg { font-size: 12px; color: var(--muted); }
 .aiw-test-msg.ok { color: var(--ok); }
 .aiw-test-msg.bad { color: var(--danger); }
+
+/* ---- Optimizers ---- */
+.aiw-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.aiw-chip {
+  background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 5px 14px; font-size: 13px; cursor: pointer; transition: all .12s ease;
+}
+.aiw-chip:hover { border-color: var(--border-strong); color: var(--text); }
+.aiw-chip.on { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+
+.aiw-opt-grid-inner {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;
+}
+.aiw-opt-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.aiw-opt-card:hover { transform: translateY(-2px); border-color: var(--border-strong); box-shadow: var(--shadow); }
+.aiw-opt-card.off { opacity: .55; }
+.aiw-opt-head { display: flex; align-items: center; gap: 8px; }
+.aiw-opt-name { font-weight: 650; }
+.aiw-opt-desc { font-size: 12.5px; color: var(--muted); line-height: 1.4; min-height: 34px; }
+.aiw-opt-stats { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.aiw-opt-stats b { color: var(--text); font-weight: 600; }
+.aiw-opt-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+.aiw-switch-wrap { display: inline-flex; }
+.aiw-switch { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+.aiw-cfg-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.aiw-try-out { margin-top: 12px; }
+.aiw-try-stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; margin-bottom: 6px; }
+.aiw-try-stats .accent { color: var(--accent); font-weight: 600; }
+.aiw-try-stats .muted { color: var(--muted); }
+.aiw-try-notes { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.aiw-try-pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px; max-height: 300px; overflow: auto; font-family: var(--mono); font-size: 12px; white-space: pre-wrap;
+}

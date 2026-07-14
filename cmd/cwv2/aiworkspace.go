@@ -32,6 +32,9 @@ func registerAIWorkspace(cp *controlplane.Server, projectDir string) {
 	cp.Query("aiw.usage.summary", func(context.Context, url.Values) (any, error) {
 		return svc.UsageSummary(), nil
 	})
+	cp.Query("aiw.optimizers.list", func(context.Context, url.Values) (any, error) {
+		return svc.OptimizersList(), nil
+	})
 
 	// --- Commands (providers) ---
 	cp.Command("aiw.provider.add", func(_ context.Context, body []byte) (any, error) {
@@ -115,5 +118,33 @@ func registerAIWorkspace(cp *controlplane.Server, projectDir string) {
 		}
 		_ = json.Unmarshal(body, &r)
 		return svc.RemoveAccount(r.ProviderID, r.AccountID)
+	})
+
+	// --- Commands (optimizers) ---
+	cp.Command("aiw.optimizer.enable", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			ID      string `json:"id"`
+			Enabled bool   `json:"enabled"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return svc.SetOptimizerEnabled(r.ID, r.Enabled), nil
+	})
+	cp.Command("aiw.optimizer.configure", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			ID     string         `json:"id"`
+			Config map[string]any `json:"config"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return svc.ConfigureOptimizer(r.ID, r.Config)
+	})
+	cp.Command("aiw.optimizer.run", func(ctx context.Context, body []byte) (any, error) {
+		var r struct {
+			ID      string         `json:"id"`
+			Kind    string         `json:"kind"`
+			Content string         `json:"content"`
+			Config  map[string]any `json:"config"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return svc.RunOptimizer(ctx, r.ID, r.Kind, r.Content, r.Config)
 	})
 }

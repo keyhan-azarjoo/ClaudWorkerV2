@@ -50,6 +50,7 @@ const NAV = [
     items: [
       { path: "/aiw/dashboard", label: "Dashboard", ico: "dashboard" },
       { path: "/aiw/providers", label: "Providers", ico: "resources" },
+      { path: "/aiw/optimizers", label: "Optimizers", ico: "improvement" },
     ],
   },
   {
@@ -82,6 +83,7 @@ const MODULES = {
   "/knowledge": () => import("./modules/knowledge.js"),
   "/aiw/dashboard": () => import("./modules/aiw/dashboard.js"),
   "/aiw/providers": () => import("./modules/aiw/providers.js"),
+  "/aiw/optimizers": () => import("./modules/aiw/optimizers.js"),
   "/metrics": () => import("./modules/metrics.js"),
   "/logs": () => import("./modules/logs.js"),
   "/settings": () => import("./modules/settings.js"),
