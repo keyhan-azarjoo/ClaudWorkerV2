@@ -145,6 +145,44 @@ func cmdServe(args []string) int {
 		}
 	}()
 
+	// Account authentication (V1 parity): REAL per-account login status + interactive login (OAuth
+	// paste-code URL) + logout, so the Accounts page reflects whether each account can actually run jobs
+	// (not just the resource health) and lets the operator sign in/out from the console.
+	aauth := newAccountAuth(cfg.Accounts, *claudeBin)
+	cp.Query("accounts.status", func(_ context.Context, _ url.Values) (any, error) {
+		return aauth.statusAll(), nil
+	})
+	cp.Command("accounts.login.begin", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return aauth.beginLogin(r.Name)
+	})
+	cp.Command("accounts.login.submit", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Name string `json:"name"`
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return aauth.submitCode(r.Name, r.Code)
+	})
+	cp.Command("accounts.login.cancel", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(body, &r)
+		aauth.cancelLogin(r.Name)
+		return map[string]any{"ok": true}, nil
+	})
+	cp.Command("accounts.logout", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(body, &r)
+		return aauth.logout(r.Name)
+	})
+
 	if *once {
 		did, err := o.ProcessOnce(context.Background())
 		if err != nil {
