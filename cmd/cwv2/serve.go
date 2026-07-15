@@ -386,6 +386,27 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 
 	// Standing RULES (Rules page): operator-defined rules injected into EVERY agent's prompt so the main
 	// agent reads them before any change (e.g. cross-platform UI parity). Editable/toggle/delete.
+	// Access GRANTS: folders the worker may read/use beyond its single-repo worktree (operator-granted),
+	// injected into every worker prompt. Fixes cross-repo tasks that fail because the plan/other repos are
+	// "outside the sandbox". "always" persists; "once" auto-expires.
+	if l.ProjectDir != "" {
+		grants := newGrantStore(l.ProjectDir)
+		o.AccessGrants = grants.activePaths
+		cp.Query("access.list", func(context.Context, url.Values) (any, error) { return grants.load(), nil })
+		cp.Command("access.add", func(_ context.Context, body []byte) (any, error) {
+			var r struct{ Path, Scope string }
+			_ = json.Unmarshal(body, &r)
+			return grants.add(r.Path, r.Scope)
+		})
+		cp.Command("access.remove", func(_ context.Context, body []byte) (any, error) {
+			var r struct {
+				Path string `json:"path"`
+			}
+			_ = json.Unmarshal(body, &r)
+			return grants.remove(r.Path), nil
+		})
+	}
+
 	if l.ProjectDir != "" {
 		rules := newRuleStore(l.ProjectDir)
 		o.Rules = rules.activeTexts
@@ -504,6 +525,44 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 				return nil, err
 			}
 			return map[string]any{"key": r.Key, "deleted": true}, nil
+		})
+		// jira.comment {key, text} — add a comment to a ticket.
+		cp.Command("jira.comment", func(ctx context.Context, body []byte) (any, error) {
+			var r struct {
+				Key  string `json:"key"`
+				Text string `json:"text"`
+			}
+			_ = json.Unmarshal(body, &r)
+			if strings.TrimSpace(r.Key) == "" || strings.TrimSpace(r.Text) == "" {
+				return nil, fmt.Errorf("key and text are required")
+			}
+			if _, err := jiraClient.AddComment(ctx, r.Key, r.Text); err != nil {
+				return nil, err
+			}
+			return map[string]any{"key": r.Key, "commented": true}, nil
+		})
+		// jira.create {summary, description, type, priority, labels} — create a new ticket in the work
+		// project. Never for marketing/deploy-to-staging tickets (standing rule).
+		cp.Command("jira.create", func(ctx context.Context, body []byte) (any, error) {
+			var r struct {
+				Summary     string   `json:"summary"`
+				Description string   `json:"description"`
+				Type        string   `json:"type"`
+				Priority    string   `json:"priority"`
+				Labels      []string `json:"labels"`
+			}
+			_ = json.Unmarshal(body, &r)
+			if strings.TrimSpace(r.Summary) == "" {
+				return nil, fmt.Errorf("summary is required")
+			}
+			key, err := jiraClient.CreateIssue(ctx, jira.CreateIssueInput{
+				ProjectKey: projectKey, Summary: r.Summary, Description: r.Description,
+				IssueType: r.Type, Priority: r.Priority, Labels: r.Labels,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"key": key, "created": true}, nil
 		})
 		// Per-ticket conversation: explain (ticket text only) or investigate (+ save to Jira). Async.
 		var chatRepo string

@@ -20,6 +20,7 @@ type WorkerInput struct {
 	KnowledgeContext   string
 	OperatorNote       string   // optional operator guidance passed on a manual Continue (what to do next)
 	Rules              []string // standing rules every agent MUST follow before making any change
+	AccessGrants       []string // extra folders the worker may read/use beyond its worktree (operator-granted)
 }
 
 // File is a path + content pair used both for relevant-file context and for proposed writes.

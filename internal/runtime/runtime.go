@@ -109,6 +109,18 @@ func BuildPrompt(in assignment.WorkerInput) string {
 		}
 	}
 
+	// Operator-GRANTED access — folders you may READ and use beyond your single-repo worktree (e.g. the
+	// whole project, sibling repos, a plan doc). Use them for context; to CHANGE another repo, make your
+	// own worktree there — never edit a shared clone in place.
+	if len(in.AccessGrants) > 0 {
+		b.WriteString("\n# Granted access — folders you MAY read/use (operator-granted)\n")
+		for _, g := range in.AccessGrants {
+			if s := strings.TrimSpace(g); s != "" {
+				fmt.Fprintf(&b, "- %s\n", s)
+			}
+		}
+	}
+
 	if strings.TrimSpace(in.KnowledgeContext) != "" {
 		b.WriteString("\n")
 		b.WriteString(strings.TrimRight(in.KnowledgeContext, "\n"))

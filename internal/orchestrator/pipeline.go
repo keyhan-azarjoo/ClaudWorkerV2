@@ -59,7 +59,7 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 	a.State = assignment.StateDeveloping
 	_ = o.Store.Save(a)
 	o.recordAction(iss.Key, "develop", "running", "")
-	dev, err := o.Developer.Develop(ctx, DevInput{Issue: iss.Key, Summary: iss.Summary, AcceptanceCriteria: iss.AcceptanceCriteria, KnowledgeContext: kctx, Runtime: runtimeName, Account: resID, OperatorNote: operatorNote, Rules: o.activeRules()})
+	dev, err := o.Developer.Develop(ctx, DevInput{Issue: iss.Key, Summary: iss.Summary, AcceptanceCriteria: iss.AcceptanceCriteria, KnowledgeContext: kctx, Runtime: runtimeName, Account: resID, OperatorNote: operatorNote, Rules: o.activeRules(), AccessGrants: o.activeAccessGrants()})
 	o.emit(controlplane.EventRuntimeFinished, "runtime", map[string]any{"issue": iss.Key, "ok": err == nil && dev.OK, "changed": len(dev.ChangedFiles)})
 	// Only a real execution ERROR is a failure (red X). A worker that ran fine but produced no changes
 	// (nothing to do / already satisfied) is NOT a failure — that was showing a misleading red X.
@@ -261,7 +261,7 @@ type impImprover struct {
 }
 
 func (im *impImprover) Improve(ctx context.Context, in improvement.ImprovementInput) (improvement.Change, error) {
-	dev, err := im.o.Developer.Develop(ctx, DevInput{Issue: im.iss.Key, Summary: im.iss.Summary, AcceptanceCriteria: im.iss.AcceptanceCriteria, KnowledgeContext: im.kctx, Runtime: im.runtime, Account: im.account, OperatorNote: im.operatorNote, Rules: im.o.activeRules()})
+	dev, err := im.o.Developer.Develop(ctx, DevInput{Issue: im.iss.Key, Summary: im.iss.Summary, AcceptanceCriteria: im.iss.AcceptanceCriteria, KnowledgeContext: im.kctx, Runtime: im.runtime, Account: im.account, OperatorNote: im.operatorNote, Rules: im.o.activeRules(), AccessGrants: im.o.activeAccessGrants()})
 	if err != nil {
 		return improvement.Change{}, err
 	}

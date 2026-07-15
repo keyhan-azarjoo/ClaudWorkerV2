@@ -55,6 +55,7 @@ type DevInput struct {
 	Issue, Summary, AcceptanceCriteria, KnowledgeContext, Runtime, Account string
 	OperatorNote                                                           string   // human guidance from a manual Continue
 	Rules                                                                  []string // standing rules every agent must follow
+	AccessGrants                                                           []string // extra folders the worker may read/use
 }
 
 // DevResult is a worker outcome (files changed). Real impl wraps runtime.Runner; tests fake it.
@@ -153,6 +154,10 @@ type Orchestrator struct {
 	// main agent reads them before any change). nil = no extra rules.
 	Rules func() []string
 
+	// AccessGrants optionally supplies extra folders the worker may read/use beyond its single-repo
+	// worktree (e.g. the whole project, a plan doc). Injected into the prompt. nil = worktree only.
+	AccessGrants func() []string
+
 	now     func() time.Time
 	trigger chan struct{}
 
@@ -184,6 +189,14 @@ func (o *Orchestrator) SetActive(a bool) {
 func (o *Orchestrator) activeRules() []string {
 	if o.Rules != nil {
 		return o.Rules()
+	}
+	return nil
+}
+
+// activeAccessGrants returns extra folders the worker may access (nil-safe).
+func (o *Orchestrator) activeAccessGrants() []string {
+	if o.AccessGrants != nil {
+		return o.AccessGrants()
 	}
 	return nil
 }

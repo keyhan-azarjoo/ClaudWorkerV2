@@ -137,6 +137,7 @@ func (w *Worker) Develop(ctx context.Context, worktree string, in orchestrator.D
 		KnowledgeContext:   in.KnowledgeContext,
 		OperatorNote:       in.OperatorNote,
 		Rules:              in.Rules,
+		AccessGrants:       in.AccessGrants,
 		// RelevantFiles intentionally empty: the CLI reads the worktree directly. Execution/Git/Policy/
 		// Lease state never enter the prompt.
 	}
