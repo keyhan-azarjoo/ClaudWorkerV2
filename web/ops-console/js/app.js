@@ -42,6 +42,7 @@ const NAV = [
     group: "Knowledge",
     items: [
       { path: "/rules", label: "Rules", ico: "policies" },
+      { path: "/access", label: "Access", ico: "leases" },
       { path: "/knowledge", label: "Knowledge", ico: "knowledge" },
     ],
   },
@@ -88,6 +89,7 @@ const MODULES = {
   "/accounts": () => import("./modules/accounts.js"),
   "/credentials": () => import("./modules/credentials.js"),
   "/rules": () => import("./modules/rules.js"),
+  "/access": () => import("./modules/access.js"),
   "/knowledge": () => import("./modules/knowledge.js"),
   "/aiw/dashboard": () => import("./modules/aiw/dashboard.js"),
   "/aiw/providers": () => import("./modules/aiw/providers.js"),
