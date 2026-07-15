@@ -615,6 +615,43 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 	if gitA != nil {
 		cp.Query("git.worktrees", func(ctx context.Context, _ url.Values) (any, error) { return gitA.Worktrees(ctx) })
 		cp.Query("git.status", func(ctx context.Context, _ url.Values) (any, error) { return gitA.Status(ctx) })
+
+		// Auto-clean janitor: reap leftover worktrees + branches for issues that are terminal or unknown,
+		// and remove empty stray worktree dirs. This covers runs that ended WITHOUT the in-process cleanup —
+		// killed mid-task, cancelled, or crashed — so no leftovers accumulate. Never touches in-flight or
+		// still-resumable work (WorktreeReapable is conservative).
+		reap := func(ctx context.Context) int {
+			n := 0
+			wts, _ := gitA.Worktrees(ctx)
+			for _, wt := range wts {
+				if wt.Path == gitA.RepoPath() {
+					continue // never the main clone
+				}
+				if filepath.Dir(wt.Path) != gitA.WorktreeDir() {
+					continue // only per-assignment worktrees under the worktree dir
+				}
+				issue := filepath.Base(wt.Path)
+				if o.WorktreeReapable(issue) {
+					_ = gitA.Cleanup(ctx, issue)
+					n++
+				}
+			}
+			gitA.RemoveEmptyWorktreeDirs()
+			return n
+		}
+		cp.Command("git.reap", func(ctx context.Context, _ []byte) (any, error) {
+			return map[string]any{"reaped": reap(ctx)}, nil
+		})
+		if mode == "live" {
+			go func() {
+				reap(context.Background()) // sweep leftovers on boot
+				t := time.NewTicker(15 * time.Minute)
+				defer t.Stop()
+				for range t.C {
+					reap(context.Background())
+				}
+			}()
+		}
 	}
 	// Live Worker Runtime state → Control Plane (active executions, accounts, cooldowns, failover).
 	if worker != nil {

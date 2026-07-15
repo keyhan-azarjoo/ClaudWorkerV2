@@ -201,6 +201,27 @@ func (o *Orchestrator) activeAccessGrants() []string {
 	return nil
 }
 
+// WorktreeReapable reports whether an issue's leftover Git worktree can be safely removed: it is not
+// currently executing, and its assignment is terminal (done/failed) or absent. This lets a janitor clean
+// up worktrees from runs that ended without the in-process cleanup — killed mid-task, cancelled, or
+// crashed — WITHOUT ever touching in-flight or still-resumable work.
+func (o *Orchestrator) WorktreeReapable(issue string) bool {
+	o.mu.Lock()
+	running := o.inflight[issue]
+	o.mu.Unlock()
+	if running {
+		return false
+	}
+	a, ok, err := o.Store.Load(issue)
+	if err != nil {
+		return false // can't be sure → keep it
+	}
+	if !ok {
+		return true // no assignment owns this worktree → stray leftover
+	}
+	return a.State.Terminal()
+}
+
 // IsActive reports whether the loop is currently processing work.
 func (o *Orchestrator) IsActive() bool {
 	o.mu.Lock()

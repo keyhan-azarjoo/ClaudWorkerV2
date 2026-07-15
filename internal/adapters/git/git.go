@@ -77,6 +77,30 @@ func (a *Adapter) Worktrees(ctx context.Context) ([]git.Worktree, error) {
 	return a.g.Worktrees(ctx, a.repo)
 }
 
+// RepoPath is the integration clone path (the main worktree — never reaped).
+func (a *Adapter) RepoPath() string { return a.repo }
+
+// WorktreeDir is the parent dir where per-assignment worktrees live.
+func (a *Adapter) WorktreeDir() string { return a.worktreeDir }
+
+// RemoveEmptyWorktreeDirs deletes empty leftover subdirectories under the worktree dir (strays from
+// worktrees that were removed manually or half-created), keeping the tree tidy. Best-effort.
+func (a *Adapter) RemoveEmptyWorktreeDirs() {
+	entries, err := os.ReadDir(a.worktreeDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		p := filepath.Join(a.worktreeDir, e.Name())
+		if sub, err := os.ReadDir(p); err == nil && len(sub) == 0 {
+			_ = os.Remove(p)
+		}
+	}
+}
+
 // Status is the integration clone's Git status for the console (clean? conflicts?).
 type Status struct {
 	Branch    string   `json:"branch"`
