@@ -15,20 +15,22 @@ import (
 type accessRequest struct {
 	ID        string `json:"id"`
 	Issue     string `json:"issue"`
-	Resource  string `json:"resource"` // best-effort hint of what it needs (may be empty)
+	Resource  string `json:"resource"`  // clean path/URL the agent asked for (may be empty)
+	Suggested string `json:"suggested"` // default folder to grant so you can just click Allow
 	Reason    string `json:"reason"`
 	CreatedAt string `json:"createdAt"`
 }
 
 type accessRequestStore struct {
-	mu     sync.Mutex
-	reqs   map[string]*accessRequest // one pending request per issue
-	grants *grantStore
-	retry  func(issue string)
+	mu           sync.Mutex
+	reqs         map[string]*accessRequest // one pending request per issue
+	grants       *grantStore
+	retry        func(issue string)
+	defaultGrant string // folder auto-suggested on the banner (the project folder)
 }
 
-func newAccessRequestStore(grants *grantStore, retry func(string)) *accessRequestStore {
-	return &accessRequestStore{reqs: map[string]*accessRequest{}, grants: grants, retry: retry}
+func newAccessRequestStore(grants *grantStore, retry func(string), defaultGrant string) *accessRequestStore {
+	return &accessRequestStore{reqs: map[string]*accessRequest{}, grants: grants, retry: retry, defaultGrant: defaultGrant}
 }
 
 // add raises (or refreshes) a pending access request for an issue.
@@ -38,7 +40,7 @@ func (s *accessRequestStore) add(issue, resource, reason string) {
 		return
 	}
 	s.mu.Lock()
-	s.reqs[issue] = &accessRequest{ID: issue, Issue: issue, Resource: strings.TrimSpace(resource), Reason: reason, CreatedAt: time.Now().UTC().Format(time.RFC3339)}
+	s.reqs[issue] = &accessRequest{ID: issue, Issue: issue, Resource: strings.TrimSpace(resource), Suggested: s.defaultGrant, Reason: reason, CreatedAt: time.Now().UTC().Format(time.RFC3339)}
 	s.mu.Unlock()
 }
 
@@ -64,6 +66,9 @@ func (s *accessRequestStore) allow(issue, path string) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		path = strings.TrimSpace(r.Resource)
+	}
+	if path == "" {
+		path = strings.TrimSpace(s.defaultGrant) // fall back to the project folder
 	}
 	if path == "" {
 		return fmt.Errorf("enter a real folder to grant (e.g. your project folder) — the request didn't include a usable path")

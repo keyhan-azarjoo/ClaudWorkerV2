@@ -474,7 +474,18 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 		// Access REQUESTS: when a task fails for lack of access, an Allow/Deny prompt appears at the top of
 		// the console. Allow grants the folder + retries the task automatically; Deny dismisses it. This is
 		// what stops the platform dead-ending on missing-access problems.
-		ars := newAccessRequestStore(grants, func(issue string) { o.Retry(issue) })
+		// Default folder to auto-suggest on the Allow banner so the operator can just click Allow: the
+		// project root (CWV2_PROJECT_ROOT) if set, else the project's repos dir, else the engine home.
+		defaultGrant := strings.TrimSpace(os.Getenv("CWV2_PROJECT_ROOT"))
+		if defaultGrant == "" {
+			reposDir := filepath.Join(l.ProjectDir, "repos")
+			if fi, err := os.Stat(reposDir); err == nil && fi.IsDir() {
+				defaultGrant = reposDir
+			} else {
+				defaultGrant = l.ProjectDir
+			}
+		}
+		ars := newAccessRequestStore(grants, func(issue string) { o.Retry(issue) }, defaultGrant)
 		o.OnAccessNeeded = func(issue, resource, reason string) { ars.add(issue, resource, reason) }
 		cp.Query("access.requests", func(context.Context, url.Values) (any, error) { return ars.list(), nil })
 		cp.Command("access.request.allow", func(_ context.Context, body []byte) (any, error) {
