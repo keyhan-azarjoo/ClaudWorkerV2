@@ -277,9 +277,9 @@ async function build() {
   const areqBar = el("div", { class: "areq-bar" });
   function areqCard(r) {
     const approval = r.kind === "approval"; // hardware / external action → Allow only, no folder input
-    // Access kind: auto-fill the folder so you can just click Allow (agent's real path, else the project).
-    const looksPath = r.resource && (r.resource.startsWith("/") || r.resource.startsWith("~")) && !/[<>\s]/.test(r.resource);
-    const autofill = looksPath ? r.resource : (r.suggested || "");
+    // Access kind: the box is pre-filled by the backend (agent's real path, else your project folder) so
+    // you just click Allow — you never have to type.
+    const autofill = r.fill || r.suggested || (r.resource || "");
     const pathInput = approval ? null : el("input", { class: "areq-input", value: autofill, placeholder: "folder to allow — e.g. /Users/you/Projects" });
     const allow = el("button", { class: "btn primary" }, "Allow");
     const deny = el("button", { class: "btn danger" }, "Deny");
