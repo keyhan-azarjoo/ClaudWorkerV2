@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -17,7 +20,8 @@ type accessRequest struct {
 	Issue     string `json:"issue"`
 	Kind      string `json:"kind"`      // "access" (grant a folder) | "approval" (hardware/action — Allow only)
 	Resource  string `json:"resource"`  // clean path/URL the agent asked for (access kind; may be empty)
-	Suggested string `json:"suggested"` // default folder to grant so you can just click Allow (access kind)
+	Suggested string `json:"suggested"` // default folder to grant (access kind)
+	Fill      string `json:"fill"`      // exact value the Allow box shows — never empty for an access request
 	Reason    string `json:"reason"`
 	CreatedAt string `json:"createdAt"`
 }
@@ -28,13 +32,56 @@ type accessRequestStore struct {
 	grants       *grantStore
 	retry        func(issue, note string)
 	defaultGrant string // folder auto-suggested on the banner (the project folder)
+	path         string // persistence file (requests survive restarts)
 }
 
-func newAccessRequestStore(grants *grantStore, retry func(string, string), defaultGrant string) *accessRequestStore {
-	return &accessRequestStore{reqs: map[string]*accessRequest{}, grants: grants, retry: retry, defaultGrant: defaultGrant}
+func newAccessRequestStore(grants *grantStore, retry func(string, string), defaultGrant, projectDir string) *accessRequestStore {
+	s := &accessRequestStore{reqs: map[string]*accessRequest{}, grants: grants, retry: retry, defaultGrant: defaultGrant}
+	if projectDir != "" {
+		s.path = filepath.Join(projectDir, "access-requests.json")
+		s.load()
+	}
+	return s
 }
 
-// add raises (or refreshes) a pending request for an issue. kind defaults to "access".
+func (s *accessRequestStore) load() {
+	b, err := os.ReadFile(s.path)
+	if err != nil {
+		return
+	}
+	var arr []*accessRequest
+	if json.Unmarshal(b, &arr) == nil {
+		for _, r := range arr {
+			if r != nil && r.Issue != "" {
+				s.reqs[r.Issue] = r
+			}
+		}
+	}
+}
+
+// save persists the pending requests (caller holds the lock).
+func (s *accessRequestStore) save() {
+	if s.path == "" {
+		return
+	}
+	arr := make([]*accessRequest, 0, len(s.reqs))
+	for _, r := range s.reqs {
+		arr = append(arr, r)
+	}
+	if b, err := json.MarshalIndent(arr, "", "  "); err == nil {
+		_ = os.WriteFile(s.path, b, 0o644)
+	}
+}
+
+// looksLikePath reports whether s is a usable local folder path (not a placeholder/URL/description).
+func looksLikePath(s string) bool {
+	s = strings.TrimSpace(s)
+	return (strings.HasPrefix(s, "/") || strings.HasPrefix(s, "~/")) && !strings.ContainsAny(s, "<> ")
+}
+
+// add raises (or refreshes) a pending request for an issue. kind defaults to "access". The Fill value
+// (what the Allow box shows) is decided HERE so the operator never has to type: the agent's real path if
+// it gave one, else the project folder.
 func (s *accessRequestStore) add(issue, kind, resource, reason string) {
 	issue = strings.TrimSpace(issue)
 	if issue == "" {
@@ -43,12 +90,19 @@ func (s *accessRequestStore) add(issue, kind, resource, reason string) {
 	if kind != "approval" {
 		kind = "access"
 	}
-	sug := ""
+	resource = strings.TrimSpace(resource)
+	sug, fill := "", ""
 	if kind == "access" {
 		sug = s.defaultGrant
+		if looksLikePath(resource) {
+			fill = resource
+		} else {
+			fill = s.defaultGrant // the project folder → one click
+		}
 	}
 	s.mu.Lock()
-	s.reqs[issue] = &accessRequest{ID: issue, Issue: issue, Kind: kind, Resource: strings.TrimSpace(resource), Suggested: sug, Reason: reason, CreatedAt: time.Now().UTC().Format(time.RFC3339)}
+	s.reqs[issue] = &accessRequest{ID: issue, Issue: issue, Kind: kind, Resource: resource, Suggested: sug, Fill: fill, Reason: reason, CreatedAt: time.Now().UTC().Format(time.RFC3339)}
+	s.save()
 	s.mu.Unlock()
 }
 
@@ -104,6 +158,7 @@ func (s *accessRequestStore) allow(issue, path string) error {
 
 	s.mu.Lock()
 	delete(s.reqs, issue)
+	s.save()
 	s.mu.Unlock()
 	if s.retry != nil {
 		s.retry(issue, note)
@@ -114,5 +169,6 @@ func (s *accessRequestStore) allow(issue, path string) error {
 func (s *accessRequestStore) deny(issue string) {
 	s.mu.Lock()
 	delete(s.reqs, strings.TrimSpace(issue))
+	s.save()
 	s.mu.Unlock()
 }
