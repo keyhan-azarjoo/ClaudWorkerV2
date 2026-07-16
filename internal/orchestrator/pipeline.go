@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"claudworker/internal/assignment"
 	"claudworker/internal/controlplane"
@@ -202,11 +203,14 @@ func (o *Orchestrator) finish(ctx context.Context, a *assignment.Assignment, iss
 		o.emit(controlplane.EventLeaseExpired, "lease", map[string]any{"kind": "issue", "resource": iss.Key, "owner": iss.Key})
 	}
 	// Clean the Git workspace on ANY terminal state (done or failed) — safety: no leaked worktrees or
-	// branches. Optional/nil-safe (simulation leaves Cleaner unset).
+	// branches. Optional/nil-safe (simulation leaves Cleaner unset). Uses a FRESH context so a cancelled
+	// run (operator Cancel cancels ctx) still gets its worktree/branch cleaned up.
 	if o.Cleaner != nil {
-		if err := o.Cleaner.Cleanup(ctx, iss.Key); err == nil {
+		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := o.Cleaner.Cleanup(cctx, iss.Key); err == nil {
 			o.emit("WorkspaceCleaned", "git", map[string]any{"issue": iss.Key, "state": string(state)})
 		}
+		ccancel()
 	}
 	o.count("processed")
 	o.count(string(state))

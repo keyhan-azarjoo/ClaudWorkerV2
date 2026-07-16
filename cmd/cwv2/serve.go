@@ -126,6 +126,33 @@ func cmdServe(args []string) int {
 		return taskAgentCounts(), nil
 	})
 
+	// Per-task PAUSE/RESUME (dashboard controls): freeze/unfreeze a running task's worker processes via
+	// SIGSTOP/SIGCONT. Cancel lives on the orchestrator (orchestrator.cancel) since it stops the pipeline.
+	tctl := newTaskControl()
+	cp.Query("tasks.paused", func(_ context.Context, _ url.Values) (any, error) {
+		return tctl.pausedList(), nil
+	})
+	cp.Command("orchestrator.pause", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Issue string `json:"issue"`
+		}
+		_ = json.Unmarshal(body, &r)
+		if strings.TrimSpace(r.Issue) == "" {
+			return nil, fmt.Errorf("issue key required")
+		}
+		return map[string]any{"issue": r.Issue, "paused": true, "signalled": tctl.pause(r.Issue)}, nil
+	})
+	cp.Command("orchestrator.resume", func(_ context.Context, body []byte) (any, error) {
+		var r struct {
+			Issue string `json:"issue"`
+		}
+		_ = json.Unmarshal(body, &r)
+		if strings.TrimSpace(r.Issue) == "" {
+			return nil, fmt.Errorf("issue key required")
+		}
+		return map[string]any{"issue": r.Issue, "paused": false, "signalled": tctl.resume(r.Issue)}, nil
+	})
+
 	// Account usage (5-hour + 7-day % used and reset times, like V1). Cached; refreshed on demand.
 	um := newUsageMonitor(cfg.Accounts)
 	cp.Query("accounts.usage", func(_ context.Context, _ url.Values) (any, error) {

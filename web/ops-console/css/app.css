@@ -251,6 +251,8 @@ html, body { max-width: 100%; overflow-x: hidden; }         /* never scroll the 
 .drawer-actions { display: inline-flex; gap: 8px; align-items: center; }
 .drawer-line.err { color: var(--danger, #f85149); font-weight: 600; }
 .task-continue { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+.task-ctl { padding: 3px 9px; font-size: 12px; }
+.task-box-head .task-ctl:first-of-type { margin-left: auto; }
 
 /* Resume message box in the agent drawer */
 .drawer-foot { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border, #21262d); background: var(--surface, #161b22); }

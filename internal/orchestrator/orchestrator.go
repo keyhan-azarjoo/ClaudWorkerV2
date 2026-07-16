@@ -166,9 +166,10 @@ type Orchestrator struct {
 	mu         sync.Mutex
 	counters   map[string]int
 	taskLog    map[string]*TaskActivity
-	taskStream map[string][]string // per-issue live agent activity lines (bounded; also persisted)
-	inflight   map[string]bool     // issues currently executing — guards against double-launch
-	decisions  []map[string]any    // policy-decision ring for the Policies page
+	taskStream map[string][]string           // per-issue live agent activity lines (bounded; also persisted)
+	inflight   map[string]bool               // issues currently executing — guards against double-launch
+	cancels    map[string]context.CancelFunc // per-issue cancel for a running task (operator Cancel)
+	decisions  []map[string]any              // policy-decision ring for the Policies page
 	lastIssue  string
 	running    bool // the serve loop goroutine is alive
 	active     bool // the loop is claiming/processing work (vs. attached-but-idle)
@@ -198,6 +199,29 @@ func (o *Orchestrator) activeAccessGrants() []string {
 	if o.AccessGrants != nil {
 		return o.AccessGrants()
 	}
+	return nil
+}
+
+// TaskRunning reports whether a task is currently executing (has a live cancelable run).
+func (o *Orchestrator) TaskRunning(issue string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.cancels[issue] != nil
+}
+
+// CancelTask cancels a running task: it cancels the run's context, which kills the worker CLI and stops
+// the pipeline; the pipeline then marks it failed and cleans the worktree/branch (cleanup runs on a
+// fresh context, so cancellation can't skip it). Errors if the task isn't currently running.
+func (o *Orchestrator) CancelTask(issue string) error {
+	o.mu.Lock()
+	cancel := o.cancels[issue]
+	o.mu.Unlock()
+	if cancel == nil {
+		return fmt.Errorf("%s is not running", issue)
+	}
+	o.AppendTaskLog(issue, "🛑 operator: cancelled the task — cleaning up")
+	cancel()
+	o.emit("AssignmentFailed", "orchestrator", map[string]any{"issue": issue, "cancelled": true})
 	return nil
 }
 
@@ -699,6 +723,21 @@ func (o *Orchestrator) RunIssue(ctx context.Context, key, account, operatorNote 
 	if key == "" {
 		return false, fmt.Errorf("issue key required")
 	}
+	// Register a cancelable context so the operator can Cancel this task mid-run (kills the worker CLI
+	// and stops the pipeline). Cleared when the run returns.
+	ctx, cancel := context.WithCancel(ctx)
+	o.mu.Lock()
+	if o.cancels == nil {
+		o.cancels = map[string]context.CancelFunc{}
+	}
+	o.cancels[key] = cancel
+	o.mu.Unlock()
+	defer func() {
+		o.mu.Lock()
+		delete(o.cancels, key)
+		o.mu.Unlock()
+		cancel()
+	}()
 	// Project gate: a deactivated project (no active repo) can't be worked, even on a manual Run.
 	if o.WorkAllowed != nil {
 		if ok, reason := o.WorkAllowed(); !ok {

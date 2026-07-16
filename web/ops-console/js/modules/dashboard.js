@@ -12,7 +12,7 @@ const hhmmss = (iso) => String(iso || "").slice(11, 19) || "—";
 const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n || 0));
 
 // One task box: header (issue + state badge + account) and the ordered action timeline.
-function taskBox(t, agentCount) {
+function taskBox(t, agentCount, pausedSet, onChange) {
   const rawActions = Array.isArray(t.actions) ? t.actions : [];
   // Collapse the timeline to ONE row per stage (the latest status), so a stage no longer shows both a
   // "running" row AND a "done" row. Order follows each stage's first appearance (the pipeline order).
@@ -41,6 +41,40 @@ function taskBox(t, agentCount) {
     };
   }
 
+  // A RUNNING (non-terminal) task gets Pause/Resume + Cancel controls. Pause freezes its worker
+  // processes (SIGSTOP); Cancel stops it and cleans up the worktree/branch.
+  const isPaused = !!(pausedSet && pausedSet.has(t.issue));
+  let ctlPause = null,
+    ctlCancel = null,
+    pausedPill = null;
+  if (!terminal) {
+    ctlPause = el("button", { class: "btn ghost task-ctl", title: isPaused ? "Resume this task" : "Pause this task" }, isPaused ? "▶ Resume" : "⏸ Pause");
+    ctlPause.onclick = async (e) => {
+      e.stopPropagation();
+      ctlPause.disabled = true;
+      try {
+        await api.command(isPaused ? "orchestrator.resume" : "orchestrator.pause", { issue: t.issue });
+      } catch (err) {
+        alert((isPaused ? "Resume" : "Pause") + " failed: " + (err && err.message ? err.message : err));
+      }
+      onChange && onChange();
+    };
+    ctlCancel = el("button", { class: "btn danger task-ctl", title: "Cancel and clean up" }, "✕ Cancel");
+    ctlCancel.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Cancel ${t.issue}? It will be stopped now and its worktree/branch cleaned up.`)) return;
+      ctlCancel.disabled = true;
+      ctlCancel.textContent = "Cancelling…";
+      try {
+        await api.command("orchestrator.cancel", { issue: t.issue });
+      } catch (err) {
+        alert("Cancel failed: " + (err && err.message ? err.message : err));
+      }
+      onChange && onChange();
+    };
+    if (isPaused) pausedPill = badge("paused", "warn");
+  }
+
   const head = el(
     "div",
     { class: "task-box-head" },
@@ -53,7 +87,10 @@ function taskBox(t, agentCount) {
       ? el("span", { class: "task-tok", title: "tokens sent / received (live)" }, "↑" + fmtTok(t.tokens_in) + " ↓" + fmtTok(t.tokens_out))
       : null,
     t.account ? el("span", { class: "task-acct" }, "on " + t.account) : null,
-    continueBtn
+    pausedPill,
+    continueBtn,
+    ctlPause,
+    ctlCancel
   );
 
   const nowLine = running ? el("div", { class: "task-now running" }, "▶ now: " + (running.stage || "—") + (running.detail ? " " + running.detail : "")) : null;
@@ -289,10 +326,12 @@ export default {
     const isDone = (s) => s === "done" || s === "failed";
     async function loadTasks() {
       try {
-        const [tasks, agents] = await Promise.all([
+        const [tasks, agents, paused] = await Promise.all([
           api.query("tasks.activity").then((x) => x || []),
           api.query("tasks.agents").catch(() => ({})),
+          api.query("tasks.paused").catch(() => []),
         ]);
+        const pausedSet = new Set(paused || []);
         const active = tasks.filter((t) => !isDone(t.state));
         // Done list: latest-finished first (by the time of the last action), capped at the last 100.
         // Tasks with NO recorded actions (legacy boxes whose start time is reset each restart) have an
@@ -318,7 +357,7 @@ export default {
         renderKpis();
         tasksBody.replaceChildren(
           active.length
-            ? el("div", { class: "task-grid" }, ...active.map((t) => taskBox(t, (agents || {})[t.issue] || 0)))
+            ? el("div", { class: "task-grid" }, ...active.map((t) => taskBox(t, (agents || {})[t.issue] || 0, pausedSet, loadTasks)))
             : emptyState("No active tasks", "Press Run on a Jira ticket or Start Working.")
         );
         doneBody.replaceChildren(
