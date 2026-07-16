@@ -276,9 +276,11 @@ async function build() {
   // with Allow / Deny. Allow grants the folder + retries the task; Deny dismisses it. Polls every 5s.
   const areqBar = el("div", { class: "areq-bar" });
   function areqCard(r) {
-    // Prefill ONLY a real local path — never a placeholder like "/<the firmware repo>" or a URL.
+    // Auto-fill the folder so you can just click Allow: the agent's real path if it gave one, else the
+    // suggested project folder. (Never a placeholder like "/<the firmware repo>" or a URL.)
     const looksPath = r.resource && (r.resource.startsWith("/") || r.resource.startsWith("~")) && !/[<>\s]/.test(r.resource);
-    const pathInput = el("input", { class: "areq-input", value: looksPath ? r.resource : "", placeholder: "folder to allow — e.g. /Users/you/Projects" });
+    const autofill = looksPath ? r.resource : (r.suggested || "");
+    const pathInput = el("input", { class: "areq-input", value: autofill, placeholder: "folder to allow — e.g. /Users/you/Projects" });
     const allow = el("button", { class: "btn primary" }, "Allow");
     const deny = el("button", { class: "btn danger" }, "Deny");
     allow.onclick = async () => {
