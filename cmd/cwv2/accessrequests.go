@@ -63,16 +63,19 @@ func (s *accessRequestStore) allow(issue, path string) error {
 	}
 	path = strings.TrimSpace(path)
 	if path == "" {
-		path = r.Resource
+		path = strings.TrimSpace(r.Resource)
 	}
 	if path == "" {
-		return fmt.Errorf("enter the folder to grant (e.g. your project folder)")
+		return fmt.Errorf("enter a real folder to grant (e.g. your project folder) — the request didn't include a usable path")
 	}
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") || strings.HasSuffix(path, ".git") {
-		return fmt.Errorf("that's a repo URL — add it on the Git page, then grant its local folder here")
+		return fmt.Errorf("that's a repo URL — add it on the Git page (it gets cloned), then grant its local folder here")
+	}
+	if strings.ContainsAny(path, "<>") || strings.Contains(path, " ") {
+		return fmt.Errorf("that doesn't look like a folder path — enter a real folder, e.g. /Users/you/Projects")
 	}
 	if _, err := s.grants.add(path, "always"); err != nil {
-		return err
+		return fmt.Errorf("could not grant %q: %v — enter a real folder that exists on this machine", path, err)
 	}
 	s.mu.Lock()
 	delete(s.reqs, issue)
