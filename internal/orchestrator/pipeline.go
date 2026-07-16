@@ -143,27 +143,38 @@ func (o *Orchestrator) mergeAndClose(ctx context.Context, a *assignment.Assignme
 }
 
 // acquireRuntime enforces the mandated order: Policy (budget) → Resource (reserve) → Lease (acquire).
-// When preferred is set (operator picked an account), it reserves THAT account; if it is unavailable it
-// falls back to any available account so the task still runs.
+// When the operator EXPLICITLY picked an account (preferred set), that account is honored STRICTLY — it
+// is never silently swapped for another. If it can't be reserved, the run fails with the reason (so the
+// operator sees "SOT-Claud is offline" instead of the task quietly running on a different account). Only
+// when NO account was picked (preferred == "") does it auto-select any available account.
 func (o *Orchestrator) acquireRuntime(ctx context.Context, owner, preferred string) (string, bool, string) {
 	// Policy: budget
 	bd := o.Policy.Budget.Decide(policy.BudgetInput{UsagePct: 0, UsageKnown: true})
 	if !bd.Allow {
 		return "", false, bd.Reason
 	}
-	// Resource: reserve a runtime/account resource (the picked one first, else any available).
+	// Resource: reserve a runtime/account resource.
 	var (
 		r  *resource.Resource
 		ok bool
 	)
 	if preferred != "" {
+		// Operator's explicit choice — honor it or fail (NO silent fallback to another account).
 		r, ok = o.Resources.Reserve(owner, resource.Filter{Kind: resource.KindClaudeAccount, ID: preferred})
-	}
-	if !ok {
+		if !ok {
+			reason := "unavailable"
+			if av, found := o.Resources.AvailabilityOf(preferred); found {
+				reason = string(av)
+			} else {
+				reason = "unknown account"
+			}
+			return "", false, "selected account " + preferred + " is " + reason + " — pick another account or free it"
+		}
+	} else {
 		r, ok = o.Resources.Reserve(owner, resource.Filter{Kind: resource.KindClaudeAccount})
-	}
-	if !ok {
-		return "", false, "no available runtime resource"
+		if !ok {
+			return "", false, "no available runtime resource"
+		}
 	}
 	// Lease: durable ownership of the reserved resource
 	if _, granted, _ := o.Leases.Acquire(lease.Request{Kind: lease.KindResource, Resource: r.ID, Owner: owner, Reason: "runtime", Renewable: true}); !granted {
