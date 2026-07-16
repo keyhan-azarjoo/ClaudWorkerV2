@@ -45,6 +45,16 @@ func simpleFailReason(streamText, technicalReason string) string {
 	return "The task did not complete."
 }
 
+// lastRunSegment returns only the FINAL run's output from a task log (a retried task's log holds several
+// runs, each starting with "▶ agent started"). Classifying the last run avoids picking up a stale signal
+// from an earlier attempt (e.g. an early auth failure that was later fixed).
+func lastRunSegment(text string) string {
+	if i := strings.LastIndex(text, "▶ agent started"); i >= 0 {
+		return text[i:]
+	}
+	return text
+}
+
 // FailReason returns the plain-language reason a task failed. It uses the reason computed at fail time
 // (in memory) and, after a restart, recomputes it from the persisted task log so it survives restarts.
 func (o *Orchestrator) FailReason(issue string) string {
@@ -56,7 +66,7 @@ func (o *Orchestrator) FailReason(issue string) string {
 	}
 	if o.TaskLogDir != "" {
 		if b, err := os.ReadFile(filepath.Join(o.TaskLogDir, logSlug(issue)+".log")); err == nil {
-			return simpleFailReason(string(b), "")
+			return simpleFailReason(lastRunSegment(string(b)), "")
 		}
 	}
 	return ""
