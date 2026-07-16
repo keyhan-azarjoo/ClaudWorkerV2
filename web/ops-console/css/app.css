@@ -464,3 +464,9 @@ textarea.login-input { resize: vertical; font-family: inherit; }
 .areq-title { font-weight: 700; }
 .areq-reason { color: var(--muted); font-size: 13px; flex: 1; min-width: 180px; }
 .areq-input { flex: 1; min-width: 220px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 12px; }
+
+/* ---- Jira list: hardware/human-needed rows + project labels ---- */
+.tbl tr.needs-row td { background: color-mix(in oklab, var(--warn) 13%, transparent); }
+.tbl tr.needs-row td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+.jira-labels { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+.jira-label { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }

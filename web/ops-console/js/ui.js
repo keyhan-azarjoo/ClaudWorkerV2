@@ -81,12 +81,12 @@ export function statusDot(tone, pulse) {
 }
 
 // table(columns, rows) where columns = [{key,label,render?,mono?}].
-export function table(columns, rows) {
+export function table(columns, rows, opts = {}) {
   const thead = el("thead", {}, el("tr", {}, ...columns.map((c) => el("th", {}, c.label))));
   const trs = rows.map((r) =>
     el(
       "tr",
-      {},
+      { class: opts.rowClass ? opts.rowClass(r) || "" : "" },
       ...columns.map((c) => {
         const v = c.render ? c.render(r) : r[c.key];
         // data-label drives the mobile "stacked card" layout (each cell shows its column name).
