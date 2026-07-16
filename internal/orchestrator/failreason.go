@@ -55,6 +55,31 @@ func lastRunSegment(text string) string {
 	return text
 }
 
+// accessNeeded reports whether a failure was caused by the worker lacking access to something outside
+// its worktree (a repo/folder/plan doc), and a best-effort hint of WHAT it needs. It honors an explicit
+// "ACCESS-REQUEST: <resource>" line the agent can emit, then falls back to well-known signatures.
+func accessNeeded(streamText string) (bool, string) {
+	if i := strings.Index(streamText, "ACCESS-REQUEST:"); i >= 0 {
+		line := streamText[i+len("ACCESS-REQUEST:"):]
+		if j := strings.IndexByte(line, '\n'); j >= 0 {
+			line = line[:j]
+		}
+		return true, strings.TrimSpace(line)
+	}
+	t := strings.ToLower(streamText)
+	for _, sig := range []string{
+		"outside my sandbox", "outside the sandbox", "not in this repo", "not in this worktree",
+		"backend-only", "does not contain the app", "other repos", "another repo",
+		"firmware source", "firmware artifact", "no esp32", "no serial device",
+		"not available in this worktree", "plan doc is outside", "isn't in this backend", "outside this repo",
+	} {
+		if strings.Contains(t, sig) {
+			return true, "" // resource unknown → the operator specifies the folder/repo on Allow
+		}
+	}
+	return false, ""
+}
+
 // FailReason returns the plain-language reason a task failed. It uses the reason computed at fail time
 // (in memory) and, after a restart, recomputes it from the persisted task log so it survives restarts.
 func (o *Orchestrator) FailReason(issue string) string {

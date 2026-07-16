@@ -255,8 +255,16 @@ func (o *Orchestrator) finish(ctx context.Context, a *assignment.Assignment, iss
 func (o *Orchestrator) fail(ctx context.Context, a *assignment.Assignment, iss Issue, reason string) error {
 	// Plain-language "why it failed" for the operator — appended to the report (last line) + shown on the
 	// dashboard box + posted to Jira, so nobody has to decode the technical reason.
-	simple := simpleFailReason(lastRunSegment(strings.Join(o.TaskStream(iss.Key), "\n")), reason)
+	lastRun := lastRunSegment(strings.Join(o.TaskStream(iss.Key), "\n"))
+	simple := simpleFailReason(lastRun, reason)
 	o.AppendTaskLog(iss.Key, "❗ Why it failed: "+simple)
+	// If it failed for lack of access (a repo/folder outside its worktree), raise an operator Allow/Deny
+	// request so the task doesn't just dead-end — the operator grants access and it auto-retries.
+	if o.OnAccessNeeded != nil {
+		if need, resource := accessNeeded(lastRun); need {
+			o.OnAccessNeeded(iss.Key, resource, simple)
+		}
+	}
 	o.mu.Lock()
 	if o.failReasons == nil {
 		o.failReasons = map[string]string{}

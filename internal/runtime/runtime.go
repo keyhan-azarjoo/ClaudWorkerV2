@@ -121,6 +121,13 @@ func BuildPrompt(in assignment.WorkerInput) string {
 		}
 	}
 
+	// If you need a folder/repo/file OUTSIDE your workspace, don't just give up: emit ONE line
+	// `ACCESS-REQUEST: <absolute path or repo URL> — <why>` and stop. The operator gets an Allow/Deny
+	// prompt; on Allow the access is granted and the task is retried automatically.
+	b.WriteString("\n# If you need a file or repo outside your workspace\n")
+	b.WriteString("If a required folder/repo/file is not in your workspace, output exactly one line " +
+		"`ACCESS-REQUEST: <absolute path or repo URL> — <why>` and stop, instead of failing silently.\n")
+
 	if strings.TrimSpace(in.KnowledgeContext) != "" {
 		b.WriteString("\n")
 		b.WriteString(strings.TrimRight(in.KnowledgeContext, "\n"))
