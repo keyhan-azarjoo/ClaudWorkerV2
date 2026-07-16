@@ -14,7 +14,9 @@ const ACTIVE = ["claimed", "developing", "qa", "verifying", "merging"];
 // needKind flags tasks that software alone can't finish — they need a physical device/board (hardware) or
 // a person to act/verify (human) — from the summary + labels. Such rows are highlighted yellow + labelled.
 const HW_RE = /\b(hardware|firmware|esp32|esp8266|arduino|pcb|solder|gpio|raspberry|pi\s?5|pi\s?zero|micro-?controller|\bmcu\b|breadboard|enclosure|3d\s?print|power-?cycle|\bota\b|\bsensor\b|relay\s?board|serial\s?(port|device)|physical\s?(device|board|hardware)|flash\s?(the\s?)?(board|firmware|chip|device)|on\s?the\s?device|real\s?hardware)\b/i;
-const HUMAN_RE = /\b(human|manual(ly)?\s?test|by\s?hand|on-?site|in\s?person|user\s?test|usability|qa\s?sign|sign-?off|field\s?test|record\s?a\s?video|take\s?a\s?photo|physically\s?verify|hands-?on)\b/i;
+// NB: require "human" to be paired with an action word — bare "human" (e.g. "human-like voice") is NOT a
+// human-test task.
+const HUMAN_RE = /\b(human\s?(test|review|verif\w*|check|action|needed|approval|sign-?off)|needs?\s?(a\s?)?human|by\s?a?\s?human|manual(ly)?\s?test|by\s?hand|on-?site|in\s?person|user\s?test|usability\s?test|sign-?off|field\s?test|record\s?a\s?video|take\s?a\s?photo|physically\s?verify|hands-?on\s?test)\b/i;
 function needKind(r) {
   const labels = (r.labels || []).map((l) => String(l).toLowerCase());
   if (labels.some((l) => /hardware|firmware|device|esp32|esp8266|board|pcb|sensor|relay|arduino/.test(l))) return "hardware";
