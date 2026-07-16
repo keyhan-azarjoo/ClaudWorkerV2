@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -55,16 +56,41 @@ func lastRunSegment(text string) string {
 	return text
 }
 
-// accessNeeded reports whether a failure was caused by the worker lacking access to something outside
-// its worktree (a repo/folder/plan doc), and a best-effort hint of WHAT it needs. It honors an explicit
-// "ACCESS-REQUEST: <resource>" line the agent can emit, then falls back to well-known signatures.
-func accessNeeded(streamText string) (bool, string) {
-	if i := strings.Index(streamText, "ACCESS-REQUEST:"); i >= 0 {
-		line := streamText[i+len("ACCESS-REQUEST:"):]
-		if j := strings.IndexByte(line, '\n'); j >= 0 {
-			line = line[:j]
+// accessResourceRe matches a REAL local path (~/… or /…) or an http(s) URL, with no spaces/quotes/angle
+// brackets — so a placeholder like "/<the firmware repo>" does NOT match (we then leave it blank for the
+// operator to fill).
+var accessResourceRe = regexp.MustCompile(`(~?/[^\s"'<>]+|https?://[^\s"'<>]+)`)
+
+// parseAccessRequest pulls a CLEAN resource (path/URL, or "" if only a placeholder) and the human "why"
+// out of the text following an "ACCESS-REQUEST:" marker (which may be embedded in a JSON result line).
+func parseAccessRequest(after string) (resource, detail string) {
+	s := after
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i] // first line only
+	}
+	if i := strings.IndexByte(s, '"'); i >= 0 {
+		s = s[:i] // stop at JSON string junk (the marker has no quotes)
+	}
+	s = strings.TrimSpace(s)
+	pathPart := s
+	for _, sep := range []string{" — ", " – ", " -- ", " - "} { // path — why
+		if i := strings.Index(s, sep); i >= 0 {
+			pathPart = strings.TrimSpace(s[:i])
+			detail = strings.TrimSpace(s[i+len(sep):])
+			break
 		}
-		return true, strings.TrimSpace(line)
+	}
+	resource = accessResourceRe.FindString(pathPart) // "" if it was only a placeholder like /<...>
+	return resource, detail
+}
+
+// accessNeeded reports whether a failure was caused by the worker lacking access to something outside
+// its worktree (a repo/folder/plan doc), plus a CLEAN resource hint (path/URL, may be empty) and the
+// agent's "why". It honors an explicit "ACCESS-REQUEST: …" line, then falls back to known signatures.
+func accessNeeded(streamText string) (need bool, resource, detail string) {
+	if i := strings.Index(streamText, "ACCESS-REQUEST:"); i >= 0 {
+		res, why := parseAccessRequest(streamText[i+len("ACCESS-REQUEST:"):])
+		return true, res, why
 	}
 	t := strings.ToLower(streamText)
 	for _, sig := range []string{
@@ -74,10 +100,10 @@ func accessNeeded(streamText string) (bool, string) {
 		"not available in this worktree", "plan doc is outside", "isn't in this backend", "outside this repo",
 	} {
 		if strings.Contains(t, sig) {
-			return true, "" // resource unknown → the operator specifies the folder/repo on Allow
+			return true, "", "" // resource unknown → the operator specifies the folder/repo on Allow
 		}
 	}
-	return false, ""
+	return false, "", ""
 }
 
 // FailReason returns the plain-language reason a task failed. It uses the reason computed at fail time
