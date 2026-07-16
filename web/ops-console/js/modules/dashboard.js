@@ -181,24 +181,52 @@ function openTaskDrawer(issue) {
   // Continue: retry/resume the task after a transient error (usage/rate limit, API, merge). Runs it again
   // on the selected account (or auto), with your optional message.
   const continueBtn = el("button", { class: "btn primary" }, "▶ Continue");
-  continueBtn.onclick = async () => {
-    const message = msgInput.value.trim();
-    const account = acctSel.value;
+  // When the picked account is busy (reserved) or cooling down, don't fail — ask the operator to Queue
+  // (run when it frees) or Run now in parallel, then re-issue Continue with that mode.
+  function busyChoice(account, message) {
+    const who = account ? acctSel.options[acctSel.selectedIndex].text : "that account";
+    const queueBtn = el("button", { class: "btn" }, "Queue (run when free)");
+    const parBtn = el("button", { class: "btn primary" }, "Run now in parallel");
+    const cancelBtn = el("button", { class: "btn ghost" }, "Cancel");
+    const overlay = el(
+      "div",
+      { class: "drawer-overlay", onClick: (e) => e.target === overlay && overlay.remove() },
+      el(
+        "div",
+        { class: "drawer", style: { maxWidth: "460px" } },
+        el("div", { class: "drawer-head" }, el("span", { class: "drawer-title" }, "Account is busy"), cancelBtn),
+        el("div", { style: { padding: "16px" } }, el("div", {}, who + " is currently busy with another task."), el("div", { class: "pf-label", style: { marginTop: "8px" } }, "Queue it to run as soon as that account is free, or run now in parallel on the same account.")),
+        el("div", { class: "drawer-foot" }, queueBtn, parBtn)
+      )
+    );
+    cancelBtn.onclick = () => overlay.remove();
+    queueBtn.onclick = () => { overlay.remove(); runContinue(account, message, "queue"); };
+    parBtn.onclick = () => { overlay.remove(); runContinue(account, message, "parallel"); };
+    document.body.append(overlay);
+  }
+  async function runContinue(account, message, mode) {
     continueBtn.textContent = "Continuing…";
     continueBtn.disabled = true;
     try {
-      await api.command("orchestrator.continue", { issue, message, account });
+      const r = await api.command("orchestrator.continue", { issue, message, account, mode });
       const who = account ? acctSel.options[acctSel.selectedIndex].text : "an available account";
-      logEl.append(el("div", { class: "drawer-line", style: "color:var(--ok,#3fb950)" }, "▶ continue sent" + (message ? " with your message" : "") + " — resuming on " + who + "…"));
+      const how = mode === "queue" ? "queued — will run when free on " : mode === "parallel" ? "running in parallel on " : "resuming on ";
+      logEl.append(el("div", { class: "drawer-line", style: "color:var(--ok,#3fb950)" }, "▶ " + how + who + "…"));
       msgInput.value = "";
     } catch (e) {
-      logEl.append(el("div", { class: "drawer-line", style: "color:var(--danger,#f85149)" }, "Continue failed: " + (e && e.message ? e.message : e)));
+      const msg = e && e.message ? e.message : String(e);
+      if (account && !mode && /\bis (reserved|cooldown)\b/i.test(msg)) {
+        busyChoice(account, message); // offer Queue / Run in parallel
+      } else {
+        logEl.append(el("div", { class: "drawer-line", style: "color:var(--danger,#f85149)" }, "Continue failed: " + msg));
+      }
     }
     setTimeout(() => {
       continueBtn.textContent = "▶ Continue";
       continueBtn.disabled = false;
-    }, 2500);
-  };
+    }, 1500);
+  }
+  continueBtn.onclick = () => runContinue(acctSel.value, msgInput.value.trim(), "");
   msgInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") continueBtn.click();
   });

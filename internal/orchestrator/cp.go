@@ -116,10 +116,12 @@ func (o *Orchestrator) RegisterControlPlane() {
 		var req struct {
 			Issue   string `json:"issue"`
 			Account string `json:"account"` // optional: run on THIS account (else auto-select)
+			Mode    string `json:"mode"`    // "" (run now, honor account) | "parallel" | "queue"
 		}
 		_ = json.Unmarshal(body, &req)
 		req.Issue = strings.TrimSpace(req.Issue)
 		req.Account = strings.TrimSpace(req.Account)
+		req.Mode = strings.TrimSpace(req.Mode)
 		if req.Issue == "" {
 			return nil, fmt.Errorf("issue key required")
 		}
@@ -129,8 +131,9 @@ func (o *Orchestrator) RegisterControlPlane() {
 				return nil, fmt.Errorf("project is deactivated: %s", reason)
 			}
 		}
-		// Honor the operator's account choice: reject immediately (don't silently switch) if it can't run.
-		if ok, reason := o.AccountUsable(req.Account); !ok {
+		// Gate the picked account for the chosen mode (default rejects a busy account so the UI can offer
+		// Queue / Run-in-parallel; parallel + queue accept a Reserved/Cooldown account).
+		if ok, _, reason := o.GateAccount(req.Account, req.Mode); !ok {
 			return nil, fmt.Errorf("%s", reason)
 		}
 		// Reject a double-run SYNCHRONOUSLY so the UI sees it: never run a ticket that is already
@@ -146,13 +149,18 @@ func (o *Orchestrator) RegisterControlPlane() {
 				return nil, fmt.Errorf("%s is already running", req.Issue)
 			}
 		}
+		if req.Mode == "queue" {
+			o.RunWhenFree(req.Issue, req.Account, "")
+			return map[string]any{"issue": req.Issue, "account": req.Account, "queued": true}, nil
+		}
+		force := req.Mode == "parallel"
 		go func() {
-			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account, ""); err != nil {
+			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account, "", force); err != nil {
 				o.log().Error("orchestrator", "op", "manual-run", "issue", req.Issue, "error", err.Error())
 				o.emit("AssignmentFailed", "orchestrator", map[string]any{"issue": req.Issue, "error": err.Error()})
 			}
 		}()
-		return map[string]any{"issue": req.Issue, "account": req.Account, "started": true}, nil
+		return map[string]any{"issue": req.Issue, "account": req.Account, "started": true, "parallel": force}, nil
 	})
 	// orchestrator.continue {"issue":"SCRUM-123"} — resume/retry a task that errored (e.g. a transient
 	// rate limit / API error). A FAILED task is reset so it runs again on a fresh (non-cooled) account;
@@ -162,11 +170,13 @@ func (o *Orchestrator) RegisterControlPlane() {
 			Issue   string `json:"issue"`
 			Account string `json:"account"`
 			Message string `json:"message"` // optional operator guidance sent to the agent on resume
+			Mode    string `json:"mode"`    // "" (run now, honor account) | "parallel" | "queue"
 		}
 		_ = json.Unmarshal(body, &req)
 		req.Issue = strings.TrimSpace(req.Issue)
 		req.Account = strings.TrimSpace(req.Account)
 		req.Message = strings.TrimSpace(req.Message)
+		req.Mode = strings.TrimSpace(req.Mode)
 		if req.Issue == "" {
 			return nil, fmt.Errorf("issue key required")
 		}
@@ -175,8 +185,9 @@ func (o *Orchestrator) RegisterControlPlane() {
 				return nil, fmt.Errorf("project is deactivated: %s", reason)
 			}
 		}
-		// Honor the operator's account choice: reject immediately (don't silently switch) if it can't run.
-		if ok, reason := o.AccountUsable(req.Account); !ok {
+		// Gate the picked account for the chosen mode. Default mode rejects a busy account (the UI then
+		// offers Queue / Run-in-parallel); parallel + queue accept a Reserved/Cooldown account.
+		if ok, _, reason := o.GateAccount(req.Account, req.Mode); !ok {
 			return nil, fmt.Errorf("%s", reason)
 		}
 		o.mu.Lock()
@@ -195,13 +206,19 @@ func (o *Orchestrator) RegisterControlPlane() {
 		if req.Message != "" {
 			o.AppendTaskLog(req.Issue, "🧑 operator: "+req.Message)
 		}
+		// queue → wait for the account to free, then run; parallel → run now alongside the busy task.
+		if req.Mode == "queue" {
+			o.RunWhenFree(req.Issue, req.Account, req.Message)
+			return map[string]any{"issue": req.Issue, "queued": true}, nil
+		}
+		force := req.Mode == "parallel"
 		go func() {
-			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account, req.Message); err != nil {
+			if _, err := o.RunIssue(context.Background(), req.Issue, req.Account, req.Message, force); err != nil {
 				o.log().Error("orchestrator", "op", "continue", "issue", req.Issue, "error", err.Error())
 				o.emit("AssignmentFailed", "orchestrator", map[string]any{"issue": req.Issue, "error": err.Error()})
 			}
 		}()
-		return map[string]any{"issue": req.Issue, "continued": true}, nil
+		return map[string]any{"issue": req.Issue, "continued": true, "parallel": force}, nil
 	})
 	// orchestrator.cancel {"issue":"SCRUM-123"} — stop a RUNNING task now: cancels the run (kills the
 	// worker CLI, stops the pipeline), which then marks it failed and cleans up the worktree/branch.

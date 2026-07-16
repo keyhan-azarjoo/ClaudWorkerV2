@@ -220,6 +220,34 @@ func (o *Orchestrator) AccountUsable(id string) (bool, string) {
 	return true, ""
 }
 
+// GateAccount validates a picked account for the requested run mode and returns its availability so the
+// UI can react. mode "" (default) requires the account to be Available right now. mode "parallel" or
+// "queue" only requires it to be able to authenticate (not offline/paused/unknown) — a Reserved or
+// Cooldown account is allowed (parallel runs alongside; queue waits for it). Empty id (auto-select) is
+// always ok.
+func (o *Orchestrator) GateAccount(id, mode string) (ok bool, availability, reason string) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return true, "", ""
+	}
+	av, found := o.Resources.AvailabilityOf(id)
+	if !found {
+		return false, "", "unknown account " + id
+	}
+	switch mode {
+	case "parallel", "queue":
+		if av == resource.Offline || av == resource.Paused {
+			return false, string(av), "account " + id + " is " + string(av) + " — can't run"
+		}
+		return true, string(av), ""
+	default:
+		if av != resource.Available {
+			return false, string(av), "account " + id + " is " + string(av)
+		}
+		return true, string(av), ""
+	}
+}
+
 // TaskRunning reports whether a task is currently executing (has a live cancelable run).
 func (o *Orchestrator) TaskRunning(issue string) bool {
 	o.mu.Lock()
@@ -670,7 +698,7 @@ func (o *Orchestrator) Recover(ctx context.Context) error {
 			continue
 		}
 		o.emit("AssignmentResumed", "orchestrator", map[string]any{"issue": a.IssueKey, "state": string(a.State)})
-		_ = o.runAssignment(ctx, a, iss, "", "")
+		_ = o.runAssignment(ctx, a, iss, "", "", false)
 	}
 	return nil
 }
@@ -695,7 +723,7 @@ func (o *Orchestrator) ProcessOnce(ctx context.Context) (bool, error) {
 	if err != nil || !ok {
 		return false, err
 	}
-	return true, o.runAssignment(ctx, a, iss, "", "")
+	return true, o.runAssignment(ctx, a, iss, "", "", false)
 }
 
 // claimNext finds the first eligible, unclaimed issue and claims it: persist the Assignment, acquire
@@ -737,7 +765,7 @@ func (o *Orchestrator) claimNext(ctx context.Context) (*assignment.Assignment, I
 // RunIssue claims and runs ONE specific issue on demand (operator "run this ticket"), bypassing the
 // ready-label queue and the idle gate. It still respects the budget gate and the issue lock (never
 // redoes terminal work). Intended to be called in a goroutine — it runs the full pipeline.
-func (o *Orchestrator) RunIssue(ctx context.Context, key, account, operatorNote string) (bool, error) {
+func (o *Orchestrator) RunIssue(ctx context.Context, key, account, operatorNote string, force bool) (bool, error) {
 	if key == "" {
 		return false, fmt.Errorf("issue key required")
 	}
@@ -777,7 +805,7 @@ func (o *Orchestrator) RunIssue(ctx context.Context, key, account, operatorNote 
 		if err != nil {
 			return false, err
 		}
-		return true, o.runAssignment(ctx, a, iss, account, operatorNote)
+		return true, o.runAssignment(ctx, a, iss, account, operatorNote, force)
 	}
 	// Fresh claim for this specific issue.
 	iss, err := o.Jira.Get(ctx, key)
@@ -800,7 +828,31 @@ func (o *Orchestrator) RunIssue(ctx context.Context, key, account, operatorNote 
 	o.mu.Unlock()
 	o.emit(controlplane.EventAssignmentCreated, "assignment", map[string]any{"issue": key, "state": string(a.State)})
 	o.recordAction(key, "claimed", "done", "")
-	return true, o.runAssignment(ctx, a, iss, account, operatorNote)
+	return true, o.runAssignment(ctx, a, iss, account, operatorNote, force)
+}
+
+// RunWhenFree QUEUES a task on a specific account: it waits (in the background) until that account is
+// free (Available), then runs the task on it — the operator's "put it on the queue" choice. Gives up if
+// the account goes offline/paused or after a long wait.
+func (o *Orchestrator) RunWhenFree(issue, account, note string) {
+	o.AppendTaskLog(issue, "🕒 queued — will run when account "+account+" is free")
+	go func() {
+		for i := 0; i < 720; i++ { // up to ~2h at 10s
+			av, found := o.Resources.AvailabilityOf(account)
+			if !found || av == resource.Offline || av == resource.Paused {
+				o.AppendTaskLog(issue, "🕒 queue cancelled — account "+account+" is "+string(av))
+				return
+			}
+			if av == resource.Available {
+				if _, err := o.RunIssue(context.Background(), issue, account, note, false); err != nil {
+					o.AppendTaskLog(issue, "queued run error: "+err.Error())
+				}
+				return
+			}
+			time.Sleep(10 * time.Second) // reserved / cooldown → keep waiting
+		}
+		o.AppendTaskLog(issue, "🕒 queue timed out waiting for account "+account)
+	}()
 }
 
 // keywords derives deterministic relevance terms from the task for the Knowledge Brain.
