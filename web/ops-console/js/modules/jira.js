@@ -11,6 +11,32 @@ const prioRank = (p) => ({ Highest: 5, High: 4, Medium: 3, Low: 2, Lowest: 1 }[p
 const stateTone = (s) => ({ done: "ok", failed: "danger", merging: "info", qa: "warn", verifying: "warn", developing: "warn", claimed: "" }[s] || "");
 const ACTIVE = ["claimed", "developing", "qa", "verifying", "merging"];
 
+// needKind flags tasks that software alone can't finish — they need a physical device/board (hardware) or
+// a person to act/verify (human) — from the summary + labels. Such rows are highlighted yellow + labelled.
+const HW_RE = /\b(hardware|firmware|esp32|esp8266|arduino|pcb|solder|gpio|raspberry|pi\s?5|pi\s?zero|micro-?controller|\bmcu\b|breadboard|enclosure|3d\s?print|power-?cycle|\bota\b|\bsensor\b|relay\s?board|serial\s?(port|device)|physical\s?(device|board|hardware)|flash\s?(the\s?)?(board|firmware|chip|device)|on\s?the\s?device|real\s?hardware)\b/i;
+const HUMAN_RE = /\b(human|manual(ly)?\s?test|by\s?hand|on-?site|in\s?person|user\s?test|usability|qa\s?sign|sign-?off|field\s?test|record\s?a\s?video|take\s?a\s?photo|physically\s?verify|hands-?on)\b/i;
+function needKind(r) {
+  const labels = (r.labels || []).map((l) => String(l).toLowerCase());
+  if (labels.some((l) => /hardware|firmware|device|esp32|esp8266|board|pcb|sensor|relay|arduino/.test(l))) return "hardware";
+  if (labels.some((l) => /manual|human|on-?site|qa-?manual/.test(l))) return "human";
+  const txt = (r.summary || "") + " " + labels.join(" ");
+  if (HW_RE.test(txt)) return "hardware";
+  if (HUMAN_RE.test(txt)) return "human";
+  return "";
+}
+function needsCell(r) {
+  const k = needKind(r);
+  if (k === "hardware") return badge("🔌 Hardware needed", "warn");
+  if (k === "human") return badge("🧑 Human needed", "warn");
+  return el("span", { class: "sub" }, "—");
+}
+// projectCell shows the task's labels (the area/project it belongs to) so you know what it's for.
+function projectCell(r) {
+  const labels = (r.labels || []).filter(Boolean);
+  if (!labels.length) return el("span", { class: "sub" }, "—");
+  return el("span", { class: "jira-labels" }, ...labels.slice(0, 5).map((l) => el("span", { class: "jira-label" }, String(l))));
+}
+
 // openTicket opens a ticket detail drawer: Jira data + comments, direct status change (incl. Cancel),
 // and a per-ticket AI chat that explains the ticket (text only) or investigates + saves to Jira. Async.
 function openTicket(key, onChange) {
@@ -395,11 +421,14 @@ export default {
                     { key: "sel", label: "", render: selectCell },
                     { key: "key", label: "Key", mono: true, render: (r) => openCell(r.key, r) },
                     { key: "summary", label: "Summary", render: (r) => openCell(r.summary, r) },
+                    { key: "project", label: "Project / labels", render: projectCell },
+                    { key: "needs", label: "Needs", render: needsCell },
                     { key: "status", label: "Status", render: (r) => badge(r.status) },
                     { key: "priority", label: "Priority", render: (r) => badge(r.priority || "—", prioTone(r.priority)) },
                     { key: "action", label: "", render: actionCell },
                   ],
-                  filtered
+                  filtered,
+                  { rowClass: (r) => (needKind(r) ? "needs-row" : "") }
                 )
               : emptyState("Nothing matches", "No tasks with the selected status.")
           );
