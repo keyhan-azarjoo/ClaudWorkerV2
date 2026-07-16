@@ -18,7 +18,7 @@ import (
 
 // runAssignment drives one claimed Assignment through the full pipeline, calling each subsystem in
 // turn. Resource usage is always Policy → Resource → Lease. Every transition publishes an event.
-func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignment, iss Issue, preferredAccount, operatorNote string) error {
+func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignment, iss Issue, preferredAccount, operatorNote string, force bool) error {
 	owner := a.IssueKey
 
 	// Double-launch guard: never run the SAME issue concurrently (e.g. two Run clicks / a manual Run
@@ -40,11 +40,16 @@ func (o *Orchestrator) runAssignment(ctx context.Context, a *assignment.Assignme
 	}()
 
 	// --- Acquire required leases (Policy → Resource → Lease) for a runtime resource ---
-	resID, ok, reason := o.acquireRuntime(ctx, owner, preferredAccount)
+	// force = operator chose "run in parallel" on a busy account: use the account WITHOUT taking its
+	// exclusive reservation/lease (so it can run alongside the task that holds it), and skip release (so
+	// this run never frees the other task's account).
+	resID, ok, reason := o.acquireRuntime(ctx, owner, preferredAccount, force)
 	if !ok {
 		return o.deferAssignment(ctx, a, iss, "runtime unavailable: "+reason)
 	}
-	defer o.releaseRuntime(ctx, owner, resID)
+	if !force {
+		defer o.releaseRuntime(ctx, owner, resID)
+	}
 
 	// --- Select runtime (Policy owns the choice; the engine never names Claude directly) ---
 	runtimeName := o.Policy.RuntimeSelection.Select(policy.Capabilities{}).Runtime
@@ -147,11 +152,24 @@ func (o *Orchestrator) mergeAndClose(ctx context.Context, a *assignment.Assignme
 // is never silently swapped for another. If it can't be reserved, the run fails with the reason (so the
 // operator sees "SOT-Claud is offline" instead of the task quietly running on a different account). Only
 // when NO account was picked (preferred == "") does it auto-select any available account.
-func (o *Orchestrator) acquireRuntime(ctx context.Context, owner, preferred string) (string, bool, string) {
+func (o *Orchestrator) acquireRuntime(ctx context.Context, owner, preferred string, force bool) (string, bool, string) {
 	// Policy: budget
 	bd := o.Policy.Budget.Decide(policy.BudgetInput{UsagePct: 0, UsageKnown: true})
 	if !bd.Allow {
 		return "", false, bd.Reason
+	}
+	// Force (operator "run in parallel"): use the chosen account WITHOUT reserving it — so it can run
+	// concurrently with the task that holds it. Still require it to be able to authenticate (not offline
+	// / paused). No reservation, no lease, no release.
+	if force && preferred != "" {
+		av, found := o.Resources.AvailabilityOf(preferred)
+		if !found {
+			return "", false, "unknown account " + preferred
+		}
+		if av == resource.Offline || av == resource.Paused {
+			return "", false, "account " + preferred + " is " + string(av) + " — can't run"
+		}
+		return preferred, true, ""
 	}
 	// Resource: reserve a runtime/account resource.
 	var (
