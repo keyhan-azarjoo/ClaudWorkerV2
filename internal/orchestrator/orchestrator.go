@@ -202,6 +202,24 @@ func (o *Orchestrator) activeAccessGrants() []string {
 	return nil
 }
 
+// AccountUsable reports whether an operator-picked account can take work right now (nil id → auto,
+// always ok). Used to reject a Run/Continue immediately with a clear reason instead of silently running
+// on a different account.
+func (o *Orchestrator) AccountUsable(id string) (bool, string) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return true, ""
+	}
+	av, found := o.Resources.AvailabilityOf(id)
+	if !found {
+		return false, "unknown account " + id
+	}
+	if av != resource.Available {
+		return false, "account " + id + " is " + string(av)
+	}
+	return true, ""
+}
+
 // TaskRunning reports whether a task is currently executing (has a live cancelable run).
 func (o *Orchestrator) TaskRunning(issue string) bool {
 	o.mu.Lock()

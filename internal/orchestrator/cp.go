@@ -129,6 +129,10 @@ func (o *Orchestrator) RegisterControlPlane() {
 				return nil, fmt.Errorf("project is deactivated: %s", reason)
 			}
 		}
+		// Honor the operator's account choice: reject immediately (don't silently switch) if it can't run.
+		if ok, reason := o.AccountUsable(req.Account); !ok {
+			return nil, fmt.Errorf("%s", reason)
+		}
 		// Reject a double-run SYNCHRONOUSLY so the UI sees it: never run a ticket that is already
 		// running, or re-run one that is already finished. (Belt to the in-flight guard in the loop.)
 		if a, exists, _ := o.Store.Load(req.Issue); exists {
@@ -170,6 +174,10 @@ func (o *Orchestrator) RegisterControlPlane() {
 			if ok, reason := o.WorkAllowed(); !ok {
 				return nil, fmt.Errorf("project is deactivated: %s", reason)
 			}
+		}
+		// Honor the operator's account choice: reject immediately (don't silently switch) if it can't run.
+		if ok, reason := o.AccountUsable(req.Account); !ok {
+			return nil, fmt.Errorf("%s", reason)
 		}
 		o.mu.Lock()
 		running := o.inflight[req.Issue]
