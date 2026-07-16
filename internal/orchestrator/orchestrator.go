@@ -117,9 +117,10 @@ type TaskActivity struct {
 	Account   string       `json:"account,omitempty"`
 	StartedAt time.Time    `json:"started_at"`
 	Actions   []TaskAction `json:"actions"`
-	TokensIn  int          `json:"tokens_in"`  // ACCURATE tokens sent for this task (live, cumulative)
-	TokensOut int          `json:"tokens_out"` // ACCURATE tokens received for this task (live, cumulative)
-	Agents    int          `json:"agents"`     // how many agents worked on this task (main + sub-agents spawned)
+	TokensIn  int          `json:"tokens_in"`        // ACCURATE tokens sent for this task (live, cumulative)
+	TokensOut int          `json:"tokens_out"`       // ACCURATE tokens received for this task (live, cumulative)
+	Agents    int          `json:"agents"`           // how many agents worked on this task (main + sub-agents spawned)
+	Reason    string       `json:"reason,omitempty"` // plain-language "why it failed" (failed tasks only)
 
 	// per-run token bookkeeping (unexported; not serialized). Each Develop run reports a cumulative
 	// count that starts near 0; when it drops we've begun a new run, so we bank the finished run.
@@ -163,16 +164,17 @@ type Orchestrator struct {
 
 	TaskLogDir string // if set, per-task agent transcripts are persisted here (survive restarts)
 
-	mu         sync.Mutex
-	counters   map[string]int
-	taskLog    map[string]*TaskActivity
-	taskStream map[string][]string           // per-issue live agent activity lines (bounded; also persisted)
-	inflight   map[string]bool               // issues currently executing — guards against double-launch
-	cancels    map[string]context.CancelFunc // per-issue cancel for a running task (operator Cancel)
-	decisions  []map[string]any              // policy-decision ring for the Policies page
-	lastIssue  string
-	running    bool // the serve loop goroutine is alive
-	active     bool // the loop is claiming/processing work (vs. attached-but-idle)
+	mu          sync.Mutex
+	counters    map[string]int
+	taskLog     map[string]*TaskActivity
+	taskStream  map[string][]string           // per-issue live agent activity lines (bounded; also persisted)
+	inflight    map[string]bool               // issues currently executing — guards against double-launch
+	cancels     map[string]context.CancelFunc // per-issue cancel for a running task (operator Cancel)
+	failReasons map[string]string             // per-issue plain-language "why it failed" (set on fail)
+	decisions   []map[string]any              // policy-decision ring for the Policies page
+	lastIssue   string
+	running     bool // the serve loop goroutine is alive
+	active      bool // the loop is claiming/processing work (vs. attached-but-idle)
 }
 
 // SetActive turns work processing on or off. Turning it on wakes the loop so it drains eligible work;

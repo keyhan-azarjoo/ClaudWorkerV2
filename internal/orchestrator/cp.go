@@ -90,6 +90,9 @@ func (o *Orchestrator) RegisterControlPlane() {
 			if a, ok, _ := o.Store.Load(t.Issue); ok {
 				t.State = string(a.State)
 			}
+			if t.State == string(assignment.StateFailed) {
+				t.Reason = o.FailReason(t.Issue) // plain "why it failed" for the box
+			}
 		}
 		sort.Slice(acts, func(i, j int) bool { return acts[i].StartedAt.After(acts[j].StartedAt) })
 		return acts, nil

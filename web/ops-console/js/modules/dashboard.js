@@ -94,6 +94,8 @@ function taskBox(t, agentCount, pausedSet, onChange) {
   );
 
   const nowLine = running ? el("div", { class: "task-now running" }, "▶ now: " + (running.stage || "—") + (running.detail ? " " + running.detail : "")) : null;
+  // Failed task → a plain-language "why it failed" line so you don't have to read the log.
+  const reasonLine = t.state === "failed" && t.reason ? el("div", { class: "task-reason" }, "❗ " + t.reason) : null;
 
   const rows = actions.map((a) => {
     const status = effStatus(a.status); // terminal task → no lingering "running" (green/red, no blink)
@@ -115,6 +117,7 @@ function taskBox(t, agentCount, pausedSet, onChange) {
     "div",
     { class: "task-box clickable", title: "Click to see live agent output", onClick: () => openTaskDrawer(t.issue) },
     head,
+    reasonLine,
     nowLine,
     body,
     el("div", { class: "task-expand-hint" }, "▸ click to see what the agents are doing")
