@@ -157,6 +157,7 @@ table.tbl td.mono, table.tbl td .mono { font-family: var(--mono); font-size: 12p
 .task-action .task-time { margin-left: auto; color: var(--faint); font-size: 11px; white-space: nowrap; }
 .task-action.running { background: color-mix(in oklab, var(--warn) 12%, transparent); }
 .task-action.running .badge, .task-now.running { animation: pulse 1.6s ease-in-out infinite; }
+.task-reason { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 6px 0; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid color-mix(in oklab, var(--danger) 45%, var(--border)); background: color-mix(in oklab, var(--danger) 12%, transparent); line-height: 1.4; }
 
 /* Forms / buttons */
 .btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 550; font-size: 13px; cursor: pointer; }
