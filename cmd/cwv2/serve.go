@@ -210,6 +210,44 @@ func cmdServe(args []string) int {
 		return aauth.logout(r.Name)
 	})
 
+	// Account HEALTH from REAL state → never hand work to an account that can't run it. A logged-out
+	// account is marked Down (→ Offline) so selection skips it (this is what stops the "OAuth expired /
+	// not logged in" task failures — work fails over to a healthy account automatically). Logged-in
+	// accounts are restored to Healthy; an account at its 5-hour usage limit is cooled until it resets.
+	// Runs in the background (and once at startup).
+	if *mode == "live" {
+		applyAccountHealth := func() {
+			st := aauth.statusAll()
+			usage := um.snapshot()
+			for _, r := range o.Resources.List(resource.Filter{Kind: resource.KindClaudeAccount}) {
+				raw, ok := st[r.Name]
+				if !ok {
+					continue // unknown to the auth prober → leave as discovered
+				}
+				s, ok := raw.(map[string]any)
+				if !ok {
+					continue
+				}
+				if loggedIn, _ := s["loggedIn"].(bool); loggedIn {
+					o.Resources.SetHealth(r.ID, resource.HealthHealthy)
+					if u, ok := usage[r.Name]; ok && u.OK && u.SessionPct >= 99 && u.SessionMin > 0 {
+						o.Resources.Cooldown(r.ID, time.Now().Add(time.Duration(u.SessionMin)*time.Minute))
+					}
+				} else {
+					o.Resources.SetHealth(r.ID, resource.HealthDown)
+				}
+			}
+		}
+		go func() {
+			applyAccountHealth()
+			t := time.NewTicker(2 * time.Minute)
+			defer t.Stop()
+			for range t.C {
+				applyAccountHealth()
+			}
+		}()
+	}
+
 	if *once {
 		did, err := o.ProcessOnce(context.Background())
 		if err != nil {
