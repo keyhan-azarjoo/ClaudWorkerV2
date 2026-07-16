@@ -195,6 +195,23 @@ func (o *Orchestrator) RegisterControlPlane() {
 		}()
 		return map[string]any{"issue": req.Issue, "continued": true}, nil
 	})
+	// orchestrator.cancel {"issue":"SCRUM-123"} — stop a RUNNING task now: cancels the run (kills the
+	// worker CLI, stops the pipeline), which then marks it failed and cleans up the worktree/branch.
+	o.CP.Command("orchestrator.cancel", func(_ context.Context, body []byte) (any, error) {
+		var req struct {
+			Issue string `json:"issue"`
+		}
+		_ = json.Unmarshal(body, &req)
+		req.Issue = strings.TrimSpace(req.Issue)
+		if req.Issue == "" {
+			return nil, fmt.Errorf("issue key required")
+		}
+		if err := o.CancelTask(req.Issue); err != nil {
+			return nil, err
+		}
+		return map[string]any{"issue": req.Issue, "cancelled": true}, nil
+	})
+
 	// accounts.pause / accounts.resume {"id":"acct-main"} — per-account operator control (V1 parity).
 	o.CP.Command("accounts.pause", func(_ context.Context, body []byte) (any, error) {
 		return o.setAccountPaused(body, true)
