@@ -260,13 +260,13 @@ func (o *Orchestrator) fail(ctx context.Context, a *assignment.Assignment, iss I
 	o.AppendTaskLog(iss.Key, "❗ Why it failed: "+simple)
 	// If it failed for lack of access (a repo/folder outside its worktree), raise an operator Allow/Deny
 	// request so the task doesn't just dead-end — the operator grants access and it auto-retries.
-	if o.OnAccessNeeded != nil {
-		if need, resource, detail := accessNeeded(lastRun); need {
+	if o.OnRequest != nil {
+		if need, kind, resource, detail := detectRequest(lastRun); need {
 			reason := simple
 			if strings.TrimSpace(detail) != "" {
 				reason = detail // the agent's specific "why", when it gave one
 			}
-			o.OnAccessNeeded(iss.Key, resource, reason)
+			o.OnRequest(iss.Key, kind, resource, reason)
 		}
 	}
 	o.mu.Lock()

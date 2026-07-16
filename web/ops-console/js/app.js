@@ -276,18 +276,18 @@ async function build() {
   // with Allow / Deny. Allow grants the folder + retries the task; Deny dismisses it. Polls every 5s.
   const areqBar = el("div", { class: "areq-bar" });
   function areqCard(r) {
-    // Auto-fill the folder so you can just click Allow: the agent's real path if it gave one, else the
-    // suggested project folder. (Never a placeholder like "/<the firmware repo>" or a URL.)
+    const approval = r.kind === "approval"; // hardware / external action → Allow only, no folder input
+    // Access kind: auto-fill the folder so you can just click Allow (agent's real path, else the project).
     const looksPath = r.resource && (r.resource.startsWith("/") || r.resource.startsWith("~")) && !/[<>\s]/.test(r.resource);
     const autofill = looksPath ? r.resource : (r.suggested || "");
-    const pathInput = el("input", { class: "areq-input", value: autofill, placeholder: "folder to allow — e.g. /Users/you/Projects" });
+    const pathInput = approval ? null : el("input", { class: "areq-input", value: autofill, placeholder: "folder to allow — e.g. /Users/you/Projects" });
     const allow = el("button", { class: "btn primary" }, "Allow");
     const deny = el("button", { class: "btn danger" }, "Deny");
     allow.onclick = async () => {
       allow.disabled = true;
       allow.textContent = "Allowing…";
       try {
-        await api.command("access.request.allow", { issue: r.issue, path: pathInput.value.trim() });
+        await api.command("access.request.allow", { issue: r.issue, path: pathInput ? pathInput.value.trim() : "" });
       } catch (e) {
         alert("Allow failed: " + (e && e.message ? e.message : e));
         allow.disabled = false;
@@ -300,8 +300,8 @@ async function build() {
     return el(
       "div",
       { class: "areq-card" },
-      el("span", { class: "areq-title" }, "🔐 " + r.issue + " needs access"),
-      el("span", { class: "areq-reason" }, r.reason || "It needs a folder/repo outside its workspace."),
+      el("span", { class: "areq-title" }, (approval ? "🛠 " : "🔐 ") + r.issue + (approval ? " needs your approval" : " needs access")),
+      el("span", { class: "areq-reason" }, r.reason || (approval ? "It prepared an action that needs your OK to run." : "It needs a folder/repo outside its workspace.")),
       pathInput,
       allow,
       deny

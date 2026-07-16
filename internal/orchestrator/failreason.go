@@ -84,15 +84,43 @@ func parseAccessRequest(after string) (resource, detail string) {
 	return resource, detail
 }
 
-// accessNeeded reports whether a failure was caused by the worker lacking access to something outside
-// its worktree (a repo/folder/plan doc), plus a CLEAN resource hint (path/URL, may be empty) and the
-// agent's "why". It honors an explicit "ACCESS-REQUEST: …" line, then falls back to known signatures.
-func accessNeeded(streamText string) (need bool, resource, detail string) {
+// firstLineNoJSON returns the first line of s, cut at any JSON-string quote (markers may be embedded in
+// a JSON result line).
+func firstLineNoJSON(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	if i := strings.IndexByte(s, '"'); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
+}
+
+// detectRequest reports whether a failure means the task needs the operator to allow something, and of
+// what KIND: "access" (grant a folder/repo — the operator just clicks Allow on the auto-filled folder) or
+// "approval" (use hardware / do an external or privileged action the agent prepared — the operator just
+// clicks Allow, no input). It honors explicit "APPROVAL-REQUEST:" / "ACCESS-REQUEST:" lines the agent
+// emits after preparing everything, then falls back to known signatures.
+func detectRequest(streamText string) (need bool, kind, resource, detail string) {
+	if i := strings.Index(streamText, "APPROVAL-REQUEST:"); i >= 0 {
+		return true, "approval", "", firstLineNoJSON(streamText[i+len("APPROVAL-REQUEST:"):])
+	}
 	if i := strings.Index(streamText, "ACCESS-REQUEST:"); i >= 0 {
 		res, why := parseAccessRequest(streamText[i+len("ACCESS-REQUEST:"):])
-		return true, res, why
+		return true, "access", res, why
 	}
 	t := strings.ToLower(streamText)
+	// Hardware / physical / device / external-action signals → an APPROVAL request (a folder grant can't
+	// fix these; the operator just authorizes and the agent proceeds with what it prepared).
+	for _, sig := range []string{
+		"physical", "power-cycle", "connect the board", "plug in the", "on-site", "flash the board",
+		"real hardware", "a connected", "usb", "serial port", "no device is connected",
+	} {
+		if strings.Contains(t, sig) {
+			return true, "approval", "", ""
+		}
+	}
+	// Missing repo/folder/plan-doc → an ACCESS request (grant a folder).
 	for _, sig := range []string{
 		"outside my sandbox", "outside the sandbox", "not in this repo", "not in this worktree",
 		"backend-only", "does not contain the app", "other repos", "another repo",
@@ -100,10 +128,10 @@ func accessNeeded(streamText string) (need bool, resource, detail string) {
 		"not available in this worktree", "plan doc is outside", "isn't in this backend", "outside this repo",
 	} {
 		if strings.Contains(t, sig) {
-			return true, "", "" // resource unknown → the operator specifies the folder/repo on Allow
+			return true, "access", "", ""
 		}
 	}
-	return false, "", ""
+	return false, "", "", ""
 }
 
 // FailReason returns the plain-language reason a task failed. It uses the reason computed at fail time

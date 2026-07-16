@@ -2,39 +2,34 @@ package orchestrator
 
 import "testing"
 
-func TestAccessNeeded(t *testing.T) {
-	// Explicit marker with a REAL path → clean path + the "why" as detail.
-	need, res, detail := accessNeeded("blah\nACCESS-REQUEST: /Users/me/firmware — need the ESP32 repo\nmore")
-	if !need || res != "/Users/me/firmware" || detail != "need the ESP32 repo" {
-		t.Fatalf("marker not parsed cleanly: need=%v res=%q detail=%q", need, res, detail)
+func TestDetectRequest(t *testing.T) {
+	// ACCESS marker with a REAL path → access kind + clean path + why.
+	need, kind, res, detail := detectRequest("blah\nACCESS-REQUEST: /Users/me/firmware — need the ESP32 repo\nx")
+	if !need || kind != "access" || res != "/Users/me/firmware" || detail != "need the ESP32 repo" {
+		t.Fatalf("access marker: need=%v kind=%q res=%q detail=%q", need, kind, res, detail)
 	}
 
-	// The real-world bug: a PLACEHOLDER path + why, embedded in a JSON result line. resource must be
-	// empty (not the garbage string) so the UI doesn't prefill a non-path.
-	need, res, detail = accessNeeded(`{"ok":false,"summary":"ACCESS-REQUEST: /<ESP32 extension firmware repo + a board> — required to build+deploy on real hardware.","files":[]}`)
-	if !need {
-		t.Fatal("should still be recognised as needing access")
-	}
-	if res != "" {
-		t.Fatalf("placeholder path must yield an EMPTY resource, got %q", res)
-	}
-	if detail == "" || detail[0] == '/' {
-		t.Fatalf("detail should be the human 'why', got %q", detail)
+	// Placeholder path embedded in a JSON result line → access kind, EMPTY resource (no garbage prefill).
+	need, kind, res, _ = detectRequest(`{"ok":false,"summary":"ACCESS-REQUEST: /<firmware repo + a board> — build it.","files":[]}`)
+	if !need || kind != "access" || res != "" {
+		t.Fatalf("placeholder must give empty resource: need=%v kind=%q res=%q", need, kind, res)
 	}
 
-	// A repo URL is a valid clean resource.
-	if _, r, _ := accessNeeded("ACCESS-REQUEST: https://github.com/x/y.git — the firmware repo"); r != "https://github.com/x/y.git" {
-		t.Fatalf("URL resource not parsed: %q", r)
+	// APPROVAL marker (hardware/action) → approval kind, no resource, the whole line as detail.
+	need, kind, res, detail = detectRequest("prep done\nAPPROVAL-REQUEST: flash the prepared firmware to the connected ESP32 board")
+	if !need || kind != "approval" || res != "" || detail == "" {
+		t.Fatalf("approval marker: need=%v kind=%q res=%q detail=%q", need, kind, res, detail)
 	}
 
-	// Heuristic signals → needed, resource unknown.
-	for _, s := range []string{"the plan doc is outside my sandbox", "no ESP32/serial device available"} {
-		if n, _, _ := accessNeeded(s); !n {
-			t.Fatalf("expected access-needed for %q", s)
-		}
+	// Heuristics: hardware signal → approval; repo signal → access.
+	if n, k, _, _ := detectRequest("I need to power-cycle the physical board"); !n || k != "approval" {
+		t.Fatalf("hardware heuristic should be approval, got need=%v kind=%q", n, k)
 	}
-	// Normal failure → not an access problem.
-	if n, _, _ := accessNeeded("the build failed with a compile error"); n {
-		t.Fatal("a build failure should not be classified as needing access")
+	if n, k, _, _ := detectRequest("the plan doc is outside my sandbox"); !n || k != "access" {
+		t.Fatalf("repo heuristic should be access, got need=%v kind=%q", n, k)
+	}
+	// Normal failure → no request.
+	if n, _, _, _ := detectRequest("the build failed with a compile error"); n {
+		t.Fatal("a build failure should not raise a request")
 	}
 }

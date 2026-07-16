@@ -121,12 +121,17 @@ func BuildPrompt(in assignment.WorkerInput) string {
 		}
 	}
 
-	// If you need a folder/repo/file OUTSIDE your workspace, don't just give up: emit ONE line
-	// `ACCESS-REQUEST: <absolute path or repo URL> — <why>` and stop. The operator gets an Allow/Deny
-	// prompt; on Allow the access is granted and the task is retried automatically.
-	b.WriteString("\n# If you need a file or repo outside your workspace\n")
-	b.WriteString("If a required folder/repo/file is not in your workspace, output exactly one line " +
-		"`ACCESS-REQUEST: <absolute path or repo URL> — <why>` and stop, instead of failing silently.\n")
+	// If you need the operator to allow something to proceed, PREPARE everything you can first, then ask
+	// with ONE line and stop. The operator gets an Allow/Deny prompt at the top of the console and only
+	// clicks Allow — do NOT ask them to do setup/typing; you prepare, they just approve. On Allow the
+	// task is retried automatically (with the approval) so you continue with what you prepared.
+	b.WriteString("\n# If you need the operator to allow something (never dead-end)\n")
+	b.WriteString("- Missing a folder/repo/file outside your workspace → do your prep, then output exactly " +
+		"one line `ACCESS-REQUEST: <absolute path or repo URL> — <why>` and stop.\n")
+	b.WriteString("- Need HARDWARE or an external/privileged action (a device, board, flashing, network, " +
+		"on-site step) → FIRST prepare EVERYTHING you can (build the artifacts, write the exact commands/" +
+		"scripts, stage the data), then output exactly one line `APPROVAL-REQUEST: <what you need the " +
+		"operator to allow, and what you've prepared>` and stop. The operator just clicks Allow.\n")
 
 	if strings.TrimSpace(in.KnowledgeContext) != "" {
 		b.WriteString("\n")

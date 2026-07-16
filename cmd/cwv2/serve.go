@@ -485,8 +485,8 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 				defaultGrant = l.ProjectDir
 			}
 		}
-		ars := newAccessRequestStore(grants, func(issue string) { o.Retry(issue) }, defaultGrant)
-		o.OnAccessNeeded = func(issue, resource, reason string) { ars.add(issue, resource, reason) }
+		ars := newAccessRequestStore(grants, func(issue, note string) { o.Retry(issue, note) }, defaultGrant)
+		o.OnRequest = func(issue, kind, resource, reason string) { ars.add(issue, kind, resource, reason) }
 		cp.Query("access.requests", func(context.Context, url.Values) (any, error) { return ars.list(), nil })
 		cp.Command("access.request.allow", func(_ context.Context, body []byte) (any, error) {
 			var r struct{ Issue, Path string }
