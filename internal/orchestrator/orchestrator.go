@@ -159,6 +159,10 @@ type Orchestrator struct {
 	// worktree (e.g. the whole project, a plan doc). Injected into the prompt. nil = worktree only.
 	AccessGrants func() []string
 
+	// OnAccessNeeded is called when a task fails because it needs access it doesn't have (a repo/folder
+	// outside its worktree). The wiring raises an operator "Allow/Deny" access request. nil = no-op.
+	OnAccessNeeded func(issue, resource, reason string)
+
 	now     func() time.Time
 	trigger chan struct{}
 
@@ -831,6 +835,17 @@ func (o *Orchestrator) RunIssue(ctx context.Context, key, account, operatorNote 
 	o.emit(controlplane.EventAssignmentCreated, "assignment", map[string]any{"issue": key, "state": string(a.State)})
 	o.recordAction(key, "claimed", "done", "")
 	return true, o.runAssignment(ctx, a, iss, account, operatorNote, force)
+}
+
+// Retry re-runs a task (resetting a terminal state), on any available account. Used after the operator
+// grants access it was missing, so the task picks up the new grant and completes.
+func (o *Orchestrator) Retry(issue string) {
+	if a, ok, _ := o.Store.Load(issue); ok && a.State.Terminal() {
+		a.State = assignment.StateClaimed
+		_ = o.Store.Save(a)
+	}
+	o.AppendTaskLog(issue, "🔁 access granted — retrying the task")
+	go func() { _, _ = o.RunIssue(context.Background(), issue, "", "", false) }()
 }
 
 // RunWhenFree QUEUES a task on a specific account: it waits (in the background) until that account is

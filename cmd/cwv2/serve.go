@@ -470,6 +470,29 @@ func buildOrchestrator(cfg config.Config, mode, claudeBin string, vopts verifyOp
 			_ = json.Unmarshal(body, &r)
 			return grants.remove(r.Path), nil
 		})
+
+		// Access REQUESTS: when a task fails for lack of access, an Allow/Deny prompt appears at the top of
+		// the console. Allow grants the folder + retries the task automatically; Deny dismisses it. This is
+		// what stops the platform dead-ending on missing-access problems.
+		ars := newAccessRequestStore(grants, func(issue string) { o.Retry(issue) })
+		o.OnAccessNeeded = func(issue, resource, reason string) { ars.add(issue, resource, reason) }
+		cp.Query("access.requests", func(context.Context, url.Values) (any, error) { return ars.list(), nil })
+		cp.Command("access.request.allow", func(_ context.Context, body []byte) (any, error) {
+			var r struct{ Issue, Path string }
+			_ = json.Unmarshal(body, &r)
+			if err := ars.allow(r.Issue, r.Path); err != nil {
+				return nil, err
+			}
+			return map[string]any{"issue": r.Issue, "allowed": true}, nil
+		})
+		cp.Command("access.request.deny", func(_ context.Context, body []byte) (any, error) {
+			var r struct {
+				Issue string `json:"issue"`
+			}
+			_ = json.Unmarshal(body, &r)
+			ars.deny(r.Issue)
+			return map[string]any{"issue": r.Issue, "denied": true}, nil
+		})
 	}
 
 	if l.ProjectDir != "" {

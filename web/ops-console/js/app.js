@@ -271,10 +271,50 @@ async function build() {
   setInterval(refreshWorkState, 5000);
 
   const outlet = el("div", { class: "content" });
-  const main = el("main", { class: "main" }, topbar, outlet);
+
+  // Access-request banner: when a task fails for lack of access, a "🔐 needs access" prompt appears here
+  // with Allow / Deny. Allow grants the folder + retries the task; Deny dismisses it. Polls every 5s.
+  const areqBar = el("div", { class: "areq-bar" });
+  function areqCard(r) {
+    const pathInput = el("input", { class: "areq-input", value: r.resource || "", placeholder: "/path/to/folder to allow (e.g. your project folder)" });
+    const allow = el("button", { class: "btn primary" }, "Allow");
+    const deny = el("button", { class: "btn danger" }, "Deny");
+    allow.onclick = async () => {
+      allow.disabled = true;
+      allow.textContent = "Allowing…";
+      try {
+        await api.command("access.request.allow", { issue: r.issue, path: pathInput.value.trim() });
+      } catch (e) {
+        alert("Allow failed: " + (e && e.message ? e.message : e));
+        allow.disabled = false;
+        allow.textContent = "Allow";
+        return;
+      }
+      refreshAreq();
+    };
+    deny.onclick = async () => { try { await api.command("access.request.deny", { issue: r.issue }); } catch {} refreshAreq(); };
+    return el(
+      "div",
+      { class: "areq-card" },
+      el("span", { class: "areq-title" }, "🔐 " + r.issue + " needs access"),
+      el("span", { class: "areq-reason" }, r.reason || "It needs a folder/repo outside its workspace."),
+      pathInput,
+      allow,
+      deny
+    );
+  }
+  async function refreshAreq() {
+    let reqs = [];
+    try { reqs = (await api.query("access.requests")) || []; } catch {}
+    areqBar.replaceChildren(...reqs.map(areqCard));
+  }
+
+  const main = el("main", { class: "main" }, topbar, areqBar, outlet);
   // Scrim behind the mobile nav drawer — tap outside to close.
   const scrim = el("div", { class: "nav-scrim", onClick: () => app.classList.remove("nav-open") });
   app.append(sidebar, main, scrim);
+  refreshAreq();
+  setInterval(refreshAreq, 5000);
 
   // Live connection state
   const stream = new EventStream();

@@ -451,3 +451,16 @@ textarea.login-input { resize: vertical; font-family: inherit; }
 .bulk-count { font-weight: 700; color: var(--accent, #4f8cff); font-size: 13px; }
 .tbl td input[type="checkbox"], .tbl th input[type="checkbox"] { width: 17px; height: 17px; cursor: pointer; accent-color: var(--accent, #4f8cff); }
 @media (max-width: 640px) { .jira-toolbar { padding: 12px 12px 0; } }
+
+/* ---- Access-request banner (task needs access → Allow/Deny) ---- */
+.areq-bar { display: flex; flex-direction: column; gap: 8px; }
+.areq-bar:not(:empty) { padding: 10px 16px 0; }
+.areq-card {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--warn) 55%, var(--border));
+  background: color-mix(in oklab, var(--warn) 14%, var(--surface));
+}
+.areq-title { font-weight: 700; }
+.areq-reason { color: var(--muted); font-size: 13px; flex: 1; min-width: 180px; }
+.areq-input { flex: 1; min-width: 220px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 12px; }
